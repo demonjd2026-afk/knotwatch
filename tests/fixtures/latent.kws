@@ -1,0 +1,19 @@
+knotwatch-snapshot 1
+# fixture: see tests/test_core.c for what each one must produce
+meta time_ns=5000000000 scan_ns=20000000
+proc pid=1 name=procnto-smp-instr
+thr pid=1 tid=1 state=READY prio=0 rprio=0 blocked_ns=0 timeout=0
+thr pid=1 tid=2 state=RECEIVE prio=10 rprio=10 blocked_ns=1000000 timeout=0 chid=1
+proc pid=2 name=devc-con
+thr pid=2 tid=1 state=RECEIVE prio=10 rprio=10 blocked_ns=900000000 timeout=0 chid=1
+proc pid=3 name=sh
+thr pid=3 tid=1 state=REPLY prio=10 rprio=10 blocked_ns=7200000000000 timeout=0 srv_pid=2 srv_chid=1
+conn pid=3 coid=0 srv_pid=2 srv_chid=1
+conn pid=3 coid=1073741824 srv_pid=1 srv_chid=1
+conn pid=2 coid=1073741824 srv_pid=1 srv_chid=1
+proc pid=10 name=wheel_sensor
+thr pid=10 tid=1 state=RECEIVE prio=10 rprio=10 blocked_ns=50000000 timeout=0 chid=1
+proc pid=11 name=brake_ctl
+thr pid=11 tid=1 state=RECEIVE prio=10 rprio=10 blocked_ns=50000000 timeout=0 chid=1
+conn pid=11 coid=3 srv_pid=10 srv_chid=1
+conn pid=10 coid=3 srv_pid=11 srv_chid=1

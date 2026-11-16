@@ -1,0 +1,5 @@
+# Intended send hierarchy for the demo: servers low, clients high.
+# A process may only send to a strictly lower layer.
+layer 0 procnto*
+layer 1 wheel_sensor
+layer 2 brake_ctl
