@@ -1,8 +1,8 @@
 # Intended send hierarchy for the demo: servers low, clients high.
 # A process may only send to a strictly lower layer.
 layer 0 procnto*
-layer 1 wheel_sensor
-layer 2 brake_ctl
+layer 1 wheel_sensor logger
+layer 2 brake_ctl motor_ctl
 
 # Stock QNX services. On the QEMU image the disk driver and the filesystem
 # event manager hold connections to each other; that is the system's own

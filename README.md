@@ -56,7 +56,9 @@ same run had already reported:
 
 A scan reads, for every process, each thread's kernel state and what it is
 blocked on (`DCMD_PROC_TIDSTATUS` on `/proc/<pid>/ctl`) and every connection
-the process holds (`ConnectServerInfo()`). That becomes a *snapshot*.
+the process holds (`ConnectServerInfo()`). For a thread blocked on a mutex it
+also reads the mutex from that process's memory to learn which thread holds
+it. That becomes a *snapshot*.
 
 **Deadlock detection.** A client blocked on a server can be released by *any*
 thread of that server, so a plain cycle search is not enough. knotwatch
@@ -64,7 +66,16 @@ computes which blocked threads still have a possible rescuer: a thread is
 alive if it is runnable, waiting for an outside event, or has a kernel timeout
 armed; a blocked thread is alive if anything it waits on is alive. Whatever is
 left after that reaches a fixed point is a knot, and is reported as a
-deadlock. Only threads blocked for longer than the scan took are considered,
+deadlock. Message waits, mutex waits and thread joins are all followed, so a
+lock held across a send is caught too:
+
+```
+[CRITICAL] deadlock: 3 threads permanently blocked across 2 processes: logger, motor_ctl
+  logger[401430] thread 1 REPLY-blocked on motor_ctl[413719] channel 1 for 11.9 s (priority 10)
+  motor_ctl[413719] thread 1 REPLY-blocked on logger[401430] channel 1 for 11.9 s (priority 10)
+  motor_ctl[413719] thread 2 MUTEX-blocked on a lock held by motor_ctl[413719] thread 1 for 11.9 s (priority 10)
+```
+ Only threads blocked for longer than the scan took are considered,
 so everything reported was blocked at one common instant.
 
 **Send graph.** Across scans knotwatch accumulates who has been seen sending
@@ -148,19 +159,26 @@ cycle. That makes `knotwatch scan` usable as a gate in a QEMU-based CI job.
 | --- | --- |
 | Thread states and block reasons from the process manager | `src/qnx/collect.c`, `collect_threads()` |
 | Connection enumeration with `ConnectServerInfo()` | `src/qnx/collect.c`, `collect_connections()` |
+| Mutex owner read from the waiter's address space (`/proc/<pid>/as`) | `src/qnx/collect.c`, `resolve_lock_owners()` |
 | Resource manager with per-open pinned contents (extended OCB) | `src/qnx/watch.c`, `io_read()`, `ocb_calloc()` |
 | Timer pulse on the dispatch channel | `src/qnx/watch.c`, `kw_watch_run()`, `on_tick()` |
 | slog2 event logging | `src/qnx/watch.c`, `log_changes()` |
 | Native message passing, `name_attach()`/`name_open()` | `demo/brake_ctl.c`, `demo/wheel_sensor.c` |
+| A mutex held across `MsgSend()` | `demo/motor_ctl.c`, `demo/logger.c` |
 
 ## Limits
 
 - knotwatch is a development, integration and CI tool. QNX documents `/proc`
   as a debugging interface and advises against using it to monitor production
   systems; knotwatch follows that advice.
-- Mutex and condition-variable waits are not followed yet. A thread blocked on
-  a mutex is treated as alive, so such deadlocks are missed, never
-  misreported.
+- Condition-variable, semaphore and read-write-lock waits are not followed. A
+  thread blocked on one is treated as alive, so such deadlocks are missed,
+  never misreported.
+- The owner of a mutex is decoded from the value QNX stores in it. That
+  encoding was established by observation on QNX OS 8.0.0 x86_64 and agrees
+  with `pidin`; it is not a documented interface. When the owner cannot be
+  determined with certainty the waiter is treated as alive, and the report
+  says so.
 - A `potential-cycle` is a hint. Two processes may hold connections to each
   other and only ever exchange pulses, which cannot deadlock. Review it, then
   `ignore` it in the contract.

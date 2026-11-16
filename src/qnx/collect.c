@@ -5,6 +5,9 @@
  *                                           blocked on (debug_thread_t)
  *   /proc/<pid>/exefile                     executable path, for the name
  *   ConnectServerInfo()                     every connection a process holds
+ *   /proc/<pid>/as                          read-only, and only when a thread
+ *                                           is blocked on a mutex: the mutex
+ *                                           itself is read to see who holds it
  *
  * ctl is opened read-only: the process manager allows only one writer per
  * process, and a read-only descriptor never competes with a debugger. */
@@ -14,6 +17,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,6 +27,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "kw/util.h"
 #include "kw_qnx.h"
 
 static uint64_t now_ns(void)
@@ -104,7 +109,18 @@ static void process_name(pid_t pid, char *out, size_t out_size)
     }
 }
 
-static void collect_threads(int ctl, pid_t pid, kw_snapshot *s)
+/* Facts about a thread that are only needed while collecting. One entry per
+ * snapshot thread, in the same order. */
+typedef struct {
+    uint64_t mutex; /* address of the mutex it is blocked on, or 0 */
+} thread_aux;
+
+typedef struct {
+    thread_aux *items;
+    size_t n, cap;
+} aux_list;
+
+static void collect_threads(int ctl, pid_t pid, kw_snapshot *s, aux_list *aux)
 {
     procfs_status st;
     memset(&st, 0, sizeof(st));
@@ -134,10 +150,128 @@ static void collect_threads(int ctl, pid_t pid, kw_snapshot *s)
         case KW_WAIT_JOIN:
             t.target_tid = (int32_t)st.blocked.join.tid;
             break;
+        case KW_WAIT_MUTEX: /* owner filled in by resolve_lock_owners() */
         case KW_WAIT_NONE:
             break;
         }
         kw_snapshot_add_thread(s, &t);
+
+        void *items = aux->items;
+        kw_grow(&items, &aux->cap, aux->n + 1, sizeof(thread_aux));
+        aux->items = items;
+        thread_aux *a = &aux->items[aux->n++];
+        memset(a, 0, sizeof(*a));
+        a->mutex = t.wait == KW_WAIT_MUTEX ? st.blocked.sync.sync : 0;
+    }
+}
+
+/* Set KNOTWATCH_DEBUG_LOCKS=1 to trace how mutex owners are looked up. */
+static bool debug_locks(void)
+{
+    static int enabled = -1;
+    if (enabled < 0) {
+        enabled = getenv("KNOTWATCH_DEBUG_LOCKS") != NULL;
+    }
+    return enabled == 1;
+}
+
+/* Read `len` bytes at virtual address `addr` of another process. */
+static int read_memory(pid_t pid, uint64_t addr, void *buf, size_t len)
+{
+    char path[64];
+    snprintf(path, sizeof(path), "/proc/%d/as", (int)pid);
+    int fd = open(path, O_RDONLY);
+    if (fd == -1) {
+        return -1;
+    }
+    ssize_t n = -1;
+    if (lseek(fd, (off_t)addr, SEEK_SET) != (off_t)-1) {
+        n = read(fd, buf, len);
+    }
+    close(fd);
+    return n == (ssize_t)len ? 0 : -1;
+}
+
+/* The value a thread leaves in a mutex it has locked. On QNX OS 8.0 this is
+ * the low bits of the process id above the thread id: a mutex held by thread
+ * 1 of process 0x65017 reads 0x50170001 once the "waiters" bit is masked off,
+ * which is also how pidin names the owner. Established by observation on
+ * QNX OS 8.0.0 (x86_64), not from a documented interface. */
+static uint32_t lock_owner_id(const kw_thread *t)
+{
+    return (((uint32_t)t->pid << 16) | (uint32_t)t->tid) & _NTO_SYNC_OWNER_MASK;
+}
+
+/* For every thread blocked on a mutex, find the thread that holds it, by
+ * reading the mutex from the waiter's memory. The stored id only has room for
+ * part of the process id, so a thread of the waiter's own process is
+ * preferred; a thread elsewhere (a process-shared mutex) is accepted only if
+ * it is the single match. Anything less certain leaves the owner unknown, and
+ * the analysis then treats the waiter as not stuck. */
+static void resolve_lock_owners(kw_snapshot *s, aux_list *aux, kw_collect_stats *stats)
+{
+    for (size_t i = 0; i < s->n_threads; i++) {
+        kw_thread *t = &s->threads[i];
+        if (aux->items[i].mutex == 0) {
+            continue;
+        }
+        sync_t lock;
+        uint32_t owner = 0;
+        memset(&lock, 0, sizeof(lock));
+        int rc = read_memory(t->pid, aux->items[i].mutex, &lock, sizeof(lock));
+        if (rc == 0) {
+            switch (lock.__owner) {
+            case _NTO_SYNC_INITIALIZER:
+            case _NTO_SYNC_DESTROYED:
+            case _NTO_SYNC_NAMED_SEM:
+            case _NTO_SYNC_SEM:
+            case _NTO_SYNC_COND:
+            case _NTO_SYNC_SPIN:
+            case _NTO_SYNC_JOB:
+            case _NTO_SYNC_OWNERDEAD:
+                break; /* not a held mutex */
+            default:
+                owner = lock.__owner & _NTO_SYNC_OWNER_MASK;
+                break;
+            }
+        }
+
+        long found = -1;
+        size_t elsewhere = 0;
+        for (size_t j = 0; owner != 0 && j < s->n_threads; j++) {
+            const kw_thread *c = &s->threads[j];
+            if (j == i || c->tid > 0xffff || lock_owner_id(c) != owner) {
+                continue;
+            }
+            if (c->pid == t->pid) {
+                found = (long)j;
+                elsewhere = 0;
+                break;
+            }
+            found = (long)j;
+            elsewhere++;
+        }
+        if (elsewhere > 1) {
+            found = -1; /* ambiguous */
+        }
+        if (debug_locks()) {
+            fprintf(stderr,
+                    "knotwatch: lock-debug: waiter %d/%d mutex=0x%llx read=%d "
+                    "raw owner=0x%x -> %s",
+                    (int)t->pid, (int)t->tid,
+                    (unsigned long long)aux->items[i].mutex, rc, lock.__owner,
+                    found < 0 ? "unknown\n" : "");
+            if (found >= 0) {
+                fprintf(stderr, "%d/%d\n", (int)s->threads[found].pid,
+                        (int)s->threads[found].tid);
+            }
+        }
+        if (found < 0) {
+            stats->locks_unknown++;
+            continue;
+        }
+        t->target_pid = s->threads[found].pid;
+        t->target_tid = s->threads[found].tid;
     }
 }
 
@@ -189,6 +323,7 @@ int kw_collect(kw_snapshot *s, kw_collect_stats *stats)
         return -1;
     }
     s->time_ns = now_ns();
+    aux_list aux = {NULL, 0, 0};
 
     struct dirent *ent;
     while ((ent = readdir(dir)) != NULL) {
@@ -208,13 +343,15 @@ int kw_collect(kw_snapshot *s, kw_collect_stats *stats)
         char name[KW_NAME_MAX];
         process_name(pid, name, sizeof(name));
         kw_snapshot_add_proc(s, (int32_t)pid, name);
-        collect_threads(ctl, pid, s);
+        collect_threads(ctl, pid, s, &aux);
         close(ctl);
         if (collect_connections(pid, s) != 0) {
             stats->conns_skipped++;
         }
     }
     closedir(dir);
+    resolve_lock_owners(s, &aux, stats); /* before indexing reorders threads */
+    free(aux.items);
 
     s->scan_ns = now_ns() - s->time_ns;
     kw_snapshot_index(s);

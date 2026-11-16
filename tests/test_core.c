@@ -183,6 +183,34 @@ static void test_join(void)
     done(&r);
 }
 
+/* A lock held across a send. With the owner known, all three threads are
+ * provably stuck; without it, the lock waiter must be assumed alive and only
+ * the cycle between the processes can be reported. */
+static void test_mutex(void)
+{
+    run r;
+    analyze("mutex.kws", NULL, &r);
+    CHECK(count(&r, KW_F_DEADLOCK) == 1);
+    CHECK(count(&r, KW_F_BLOCKING_CYCLE) == 0);
+    const kw_finding *f = first(&r, KW_F_DEADLOCK);
+    CHECK(f != NULL && strstr(f->summary, "3 threads") != NULL && f->n_procs == 2);
+    CHECK(f != NULL && strstr(f->details, "motor_ctl[30] thread 2 MUTEX-blocked on a "
+                                          "lock held by motor_ctl[30] thread 1") != NULL);
+    done(&r);
+
+    analyze("mutex_unknown.kws", NULL, &r);
+    CHECK(count(&r, KW_F_DEADLOCK) == 0);
+    CHECK(count(&r, KW_F_BLOCKING_CYCLE) == 1);
+    done(&r);
+
+    /* Two threads of one process, each holding the lock the other wants. */
+    analyze("abba.kws", NULL, &r);
+    CHECK(count(&r, KW_F_DEADLOCK) == 1);
+    f = first(&r, KW_F_DEADLOCK);
+    CHECK(f != NULL && strstr(f->summary, "2 threads") != NULL && f->n_procs == 1);
+    done(&r);
+}
+
 static void test_contract(void)
 {
     kw_contract c;
@@ -261,6 +289,8 @@ static void test_snapshot_errors(void)
         "knotwatch-snapshot 1\nthr pid=1 tid=1 state=AVERYLONGSTATENAMEXX prio=1 "
         "rprio=1 blocked_ns=0 timeout=0\n",
         "knotwatch-snapshot 1\nwhat pid=1\n",
+        "knotwatch-snapshot 1\nthr pid=1 tid=1 state=MUTEX prio=1 rprio=1 "
+        "blocked_ns=0 timeout=0 owner_pid=1\n", /* owner needs both parts */
         "knotwatch-snapshot 1\nproc pid=1 name\n",
     };
     for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
@@ -285,7 +315,7 @@ static void test_roundtrip(void)
     kw_snapshot a, b;
     kw_strbuf one, two;
     char err[160];
-    load("deadlock.kws", &a);
+    load("mutex.kws", &a);
     kw_sb_init(&one);
     kw_sb_init(&two);
     kw_snapshot_write(&a, &one);
@@ -385,6 +415,7 @@ int main(int argc, char **argv)
     test_timeout();
     test_latent();
     test_join();
+    test_mutex();
     test_contract();
     test_contract_errors();
     test_snapshot_errors();

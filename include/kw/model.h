@@ -19,7 +19,8 @@ typedef enum {
     KW_WAIT_SEND,     /* sent a message nobody has received yet */
     KW_WAIT_REPLY,    /* message received, waiting for the reply */
     KW_WAIT_RECEIVE,  /* server thread waiting for a message */
-    KW_WAIT_JOIN      /* waiting for another thread in the same process */
+    KW_WAIT_JOIN,     /* waiting for another thread in the same process */
+    KW_WAIT_MUTEX     /* waiting for a mutex another thread holds */
 } kw_wait_kind;
 
 typedef struct {
@@ -27,9 +28,10 @@ typedef struct {
     int32_t tid;
     char state[KW_STATE_MAX]; /* kernel state name, e.g. "REPLY" */
     kw_wait_kind wait;
-    int32_t target_pid;  /* SEND/REPLY: server process */
+    int32_t target_pid;  /* SEND/REPLY: server process; MUTEX: owner's process */
     int32_t target_chid; /* SEND/REPLY: server channel; RECEIVE: own channel */
-    int32_t target_tid;  /* JOIN: thread being joined */
+    int32_t target_tid;  /* JOIN: thread being joined; MUTEX: owning thread,
+                            0 when the owner could not be determined */
     uint8_t prio;        /* effective priority (after inheritance) */
     uint8_t real_prio;   /* base priority */
     bool timeout_armed;  /* the kernel will unblock this thread by itself */

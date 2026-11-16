@@ -23,6 +23,19 @@
 
 #define DEMO_PULSE_TICK _PULSE_CODE_MINAVAIL
 
+/* Second scenario: a lock held across a send.
+ *
+ *   motor_ctl thread 1  locks its state, then --LOG--> logger
+ *   logger              on a rare fault --CONFIG--> motor_ctl
+ *   motor_ctl thread 2  receives CONFIG and needs the same lock
+ *
+ * Thread 1 waits for the logger, the logger waits for thread 2, and thread 2
+ * waits for the lock thread 1 holds. */
+#define DEMO_LOGGER_NAME "kw_demo_logger"
+#define DEMO_MOTOR_NAME "kw_demo_motor_ctl"
+#define DEMO_MSG_LOG (_IO_MAX + 3)
+#define DEMO_MSG_CONFIG (_IO_MAX + 4)
+
 typedef struct {
     uint16_t type;
     uint16_t reserved;

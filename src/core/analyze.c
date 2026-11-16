@@ -347,10 +347,25 @@ static int digraph_cycle(const digraph *d, int start, int *path)
 
 /* --------------------------------------------------------- snapshot checks */
 
+/* Waits whose resolution depends on one specific other thread: the thread
+ * being joined, or the thread that holds the mutex. */
+static bool waits_on_thread(const kw_thread *t)
+{
+    return t->wait == KW_WAIT_JOIN ||
+           (t->wait == KW_WAIT_MUTEX && t->target_tid != 0);
+}
+
+/* Index of that thread, or -1 if it is not in the snapshot. */
+static long awaited_thread(const kw_snapshot *s, const kw_thread *t)
+{
+    int32_t pid = t->wait == KW_WAIT_JOIN ? t->pid : t->target_pid;
+    return kw_snapshot_thread_index(s, pid, t->target_tid);
+}
+
 static bool follows_wait(const kw_thread *t)
 {
     return t->wait == KW_WAIT_SEND || t->wait == KW_WAIT_REPLY ||
-           t->wait == KW_WAIT_JOIN;
+           waits_on_thread(t);
 }
 
 /* A thread is a candidate for "stuck" only if it waits on another thread, has
@@ -375,6 +390,11 @@ static void describe_thread(const kw_snapshot *s, const kw_thread *t, kw_strbuf 
                  (int)t->tid);
     if (t->wait == KW_WAIT_JOIN) {
         kw_sb_printf(out, "JOIN-blocked on thread %d", (int)t->target_tid);
+    } else if (t->wait == KW_WAIT_MUTEX) {
+        const kw_proc *owner = kw_snapshot_proc(s, t->target_pid);
+        kw_sb_printf(out, "MUTEX-blocked on a lock held by %s[%d] thread %d",
+                     owner ? owner->name : "?", (int)t->target_pid,
+                     (int)t->target_tid);
     } else {
         const kw_proc *srv = kw_snapshot_proc(s, t->target_pid);
         kw_sb_printf(out, "%s-blocked on %s[%d] channel %d", t->state,
@@ -404,7 +424,8 @@ static void uf_union(size_t *parent, size_t a, size_t b)
 /* Deadlock = knot. Start by assuming every thread that is not a candidate is
  * alive. A candidate becomes alive if anything that could unblock it is alive:
  * for SEND/REPLY any thread of the server process (any of them may receive or
- * reply), for JOIN the joined thread. Iterate to a fixed point; whatever is
+ * reply), for JOIN the joined thread, for MUTEX the thread holding the lock.
+ * Iterate to a fixed point; whatever is
  * left can only be unblocked by threads that are themselves left, i.e. never.
  * `dead[i]` is set for those threads. */
 static void find_deadlocks(const kw_snapshot *s, const kw_options *o, bool *dead,
@@ -417,9 +438,9 @@ static void find_deadlocks(const kw_snapshot *s, const kw_options *o, bool *dead
         if (!dead[i]) {
             continue;
         }
-        if (t->wait == KW_WAIT_JOIN) {
-            if (kw_snapshot_thread_index(s, t->pid, t->target_tid) < 0) {
-                dead[i] = false; /* target already gone: join will return */
+        if (waits_on_thread(t)) {
+            if (awaited_thread(s, t) < 0) {
+                dead[i] = false; /* that thread is gone: the wait will end */
             }
         } else {
             const kw_proc *srv = kw_snapshot_proc(s, t->target_pid);
@@ -437,8 +458,8 @@ static void find_deadlocks(const kw_snapshot *s, const kw_options *o, bool *dead
             }
             const kw_thread *t = &s->threads[i];
             bool rescuer = false;
-            if (t->wait == KW_WAIT_JOIN) {
-                rescuer = !dead[kw_snapshot_thread_index(s, t->pid, t->target_tid)];
+            if (waits_on_thread(t)) {
+                rescuer = !dead[awaited_thread(s, t)];
             } else {
                 const kw_proc *srv = kw_snapshot_proc(s, t->target_pid);
                 for (size_t j = 0; j < srv->n_threads && !rescuer; j++) {
@@ -462,9 +483,8 @@ static void find_deadlocks(const kw_snapshot *s, const kw_options *o, bool *dead
             continue;
         }
         const kw_thread *t = &s->threads[i];
-        if (t->wait == KW_WAIT_JOIN) {
-            uf_union(parent, i,
-                     (size_t)kw_snapshot_thread_index(s, t->pid, t->target_tid));
+        if (waits_on_thread(t)) {
+            uf_union(parent, i, (size_t)awaited_thread(s, t));
         } else {
             const kw_proc *srv = kw_snapshot_proc(s, t->target_pid);
             for (size_t j = 0; j < srv->n_threads; j++) {
@@ -528,7 +548,7 @@ static void find_blocking_cycles(const kw_snapshot *s, const kw_options *o,
 
     for (size_t i = 0; i < n; i++) {
         const kw_thread *t = &s->threads[i];
-        if (t->wait == KW_WAIT_JOIN || !is_candidate(s, t, o)) {
+        if (waits_on_thread(t) || !is_candidate(s, t, o)) {
             continue;
         }
         const kw_proc *client = kw_snapshot_proc(s, t->pid);

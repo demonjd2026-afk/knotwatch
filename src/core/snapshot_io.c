@@ -110,6 +110,12 @@ static int parse_thread(const field *f, int n, kw_snapshot *s)
     case KW_WAIT_JOIN:
         bad = get_i32(f, n, "join_tid", 0, &t.target_tid);
         break;
+    case KW_WAIT_MUTEX:
+        /* Both or neither: an owner is a (process, thread) pair. */
+        bad = get_i32(f, n, "owner_pid", 1, &t.target_pid) ||
+              get_i32(f, n, "owner_tid", 1, &t.target_tid) ||
+              (get(f, n, "owner_pid") == NULL) != (get(f, n, "owner_tid") == NULL);
+        break;
     case KW_WAIT_NONE:
         break;
     }
@@ -237,6 +243,12 @@ void kw_snapshot_write(const kw_snapshot *s, kw_strbuf *out)
             break;
         case KW_WAIT_JOIN:
             kw_sb_printf(out, " join_tid=%d", (int)t->target_tid);
+            break;
+        case KW_WAIT_MUTEX:
+            if (t->target_tid != 0) {
+                kw_sb_printf(out, " owner_pid=%d owner_tid=%d", (int)t->target_pid,
+                             (int)t->target_tid);
+            }
             break;
         case KW_WAIT_NONE:
             break;

@@ -13,6 +13,7 @@
 typedef struct {
     unsigned procs_skipped; /* /proc/<pid>/ctl could not be opened */
     unsigned conns_skipped; /* connection list of a process was unreadable */
+    unsigned locks_unknown; /* mutex waiters whose lock owner was not found */
 } kw_collect_stats;
 
 /* Scan every process on this node into `s` (initialised by the caller) and

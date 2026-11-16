@@ -28,7 +28,7 @@ ifeq ($(QNX),1)
 CLI_SRC    += $(wildcard src/qnx/*.c)
 ALL_CFLAGS += -DKW_QNX
 LDLIBS     += -lslog2
-BINS       += $(BUILD)/brake_ctl $(BUILD)/wheel_sensor
+BINS       += $(patsubst demo/%.c,$(BUILD)/%,$(wildcard demo/*.c))
 endif
 
 CORE_OBJ := $(CORE_SRC:%.c=$(BUILD)/%.o)
@@ -44,10 +44,8 @@ $(BUILD)/%.o: %.c
 $(BUILD)/knotwatch: $(CORE_OBJ) $(CLI_OBJ)
 	$(CC) $(ALL_CFLAGS) $(LDFLAGS) $^ $(LDLIBS) -o $@
 
-$(BUILD)/brake_ctl: $(BUILD)/demo/brake_ctl.o
-	$(CC) $(ALL_CFLAGS) $(LDFLAGS) $^ -o $@
-
-$(BUILD)/wheel_sensor: $(BUILD)/demo/wheel_sensor.o
+# Each demo/<name>.c is one demo program.
+$(BUILD)/%: $(BUILD)/demo/%.o
 	$(CC) $(ALL_CFLAGS) $(LDFLAGS) $^ -o $@
 
 $(BUILD)/test_core: $(CORE_OBJ) $(BUILD)/tests/test_core.o

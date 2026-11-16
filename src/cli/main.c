@@ -235,6 +235,12 @@ static int collect_or_complain(kw_snapshot *snap)
                 "were not readable (run as root, or grant xprocess_query)\n",
                 stats.procs_skipped, stats.conns_skipped);
     }
+    if (stats.locks_unknown != 0) {
+        fprintf(stderr,
+                "knotwatch: %u threads wait for a mutex whose owner could not be "
+                "determined; they are treated as not stuck\n",
+                stats.locks_unknown);
+    }
     return 0;
 }
 

@@ -21,6 +21,7 @@ expect 2  "blocking cycle exits 2"         "$bin" analyze $fix/pool.kws
 expect 1  "mutual send exits 1"            "$bin" analyze $fix/transient.kws
 expect 0  "potential cycle is a notice"    "$bin" analyze $fix/latent.kws
 expect 1  "contract violation exits 1"     "$bin" analyze $fix/latent.kws --contract demo/demo.contract
+expect 2  "lock held across a send"       "$bin" analyze $fix/mutex.kws
 expect 0  "threshold above block time"     "$bin" analyze $fix/join.kws --min-block-ms 60000
 expect 64 "no command"                     "$bin"
 expect 64 "unknown command"                "$bin" frobnicate
@@ -37,7 +38,7 @@ expect 66 "missing contract"               "$bin" analyze $fix/healthy.kws --con
 
 # JSON must parse, when a JSON parser is available on this host.
 if command -v python3 >/dev/null 2>&1; then
-    for f in healthy deadlock pool transient latent join; do
+    for f in healthy deadlock pool transient latent join mutex abba; do
         "$bin" analyze $fix/$f.kws --format json |
             python3 -c 'import json,sys; json.load(sys.stdin)' ||
             { echo "FAIL: invalid JSON for $f"; fails=$((fails + 1)); }

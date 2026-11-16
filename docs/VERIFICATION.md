@@ -44,6 +44,9 @@ with `scripts/qnx-image.sh` and `scripts/qemu-run.sh`.
   error instead of an empty, clean-looking report.
 - The `ignore` rule in `demo/demo.contract` silences the stock-services
   notice.
+- Mutex waits: in the second demo (`motor_ctl`, `logger`) the owner of the
+  lock is found and the three-thread deadlock is reported. The owner agrees
+  with `pidin` (`413719-01`). Trace with `KNOTWATCH_DEBUG_LOCKS=1`.
 - Noise on a stock image, two cases found:
   - The process manager and the disk driver hold connections to each other.
     Edges starting at `procnto` are now excluded; confirmed gone on re-run.
@@ -58,11 +61,12 @@ with `scripts/qnx-image.sh` and `scripts/qemu-run.sh`.
    treated as alive.
 2. Running as a non-root user that has been granted `xprocess_query`.
 3. Two readers of `/dev/knotwatch` files at the same time.
-4. aarch64le, and real hardware.
+4. Mutex owners other than thread 1, a process-shared mutex held by another
+   process, and the owner encoding on aarch64le.
+5. aarch64le, and real hardware.
 
 ## Planned next
 
-- Follow mutex ownership so lock-plus-message deadlocks are covered.
 - Run as a non-root user with only the abilities it needs, with a security
   policy.
 - A host-side HTML viewer for the JSON report.

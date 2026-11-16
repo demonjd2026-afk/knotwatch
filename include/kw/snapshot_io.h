@@ -5,6 +5,7 @@
  *   proc pid=<n> name=<token>
  *   thr  pid=<n> tid=<n> state=<NAME> prio=<n> rprio=<n> blocked_ns=<n>
  *        timeout=<0|1> [srv_pid=<n> srv_chid=<n>] [chid=<n>] [join_tid=<n>]
+ *        [owner_pid=<n> owner_tid=<n>]      (MUTEX, when the owner is known)
  *   conn pid=<n> coid=<n> srv_pid=<n> srv_chid=<n>
  *
  * Blank lines and lines starting with '#' are ignored. A capture taken on a

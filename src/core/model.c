@@ -156,5 +156,8 @@ kw_wait_kind kw_wait_from_state(const char *state)
     if (strcmp(state, "JOIN") == 0) {
         return KW_WAIT_JOIN;
     }
+    if (strcmp(state, "MUTEX") == 0) {
+        return KW_WAIT_MUTEX;
+    }
     return KW_WAIT_NONE;
 }

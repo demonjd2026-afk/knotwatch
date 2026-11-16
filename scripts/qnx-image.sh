@@ -27,6 +27,8 @@ cat > "$VM/local/snippets/system_files.custom" <<FILES
 [perms=555] bin/knotwatch=$BIN/knotwatch
 [perms=555] bin/brake_ctl=$BIN/brake_ctl
 [perms=555] bin/wheel_sensor=$BIN/wheel_sensor
+[perms=555] bin/motor_ctl=$BIN/motor_ctl
+[perms=555] bin/logger=$BIN/logger
 [perms=444] etc/knotwatch/demo.contract=$REPO/demo/demo.contract
 FILES
 
@@ -55,6 +57,15 @@ BOOT
 # Extra checks of the pieces the demo itself does not exercise.
 if [ "$MODE" = "verify" ]; then
     cat >> "$VM/local/snippets/post_start.custom" <<'BOOT'
+echo "kwdemo: ---- verify: a lock held across a send ----"
+/system/bin/logger --fault-after 30 &
+sleep 1
+/system/bin/motor_ctl &
+sleep 15
+cat /dev/knotwatch/report
+pidin -p motor_ctl
+pidin -p logger
+KNOTWATCH_DEBUG_LOCKS=1 /system/bin/knotwatch capture 2>&1 > /dev/null | grep lock-debug | head -8
 echo "kwdemo: ---- verify: published files ----"
 ls -l /dev/knotwatch
 for f in report json dot snapshot; do

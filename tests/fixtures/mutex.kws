@@ -1,0 +1,11 @@
+knotwatch-snapshot 1
+meta time_ns=5000000000 scan_ns=20000000
+proc pid=1 name=procnto-smp-instr
+thr pid=1 tid=1 state=READY prio=0 rprio=0 blocked_ns=0 timeout=0
+proc pid=30 name=motor_ctl
+thr pid=30 tid=1 state=REPLY prio=10 rprio=10 blocked_ns=5000000000 timeout=0 srv_pid=31 srv_chid=1
+thr pid=30 tid=2 state=MUTEX prio=10 rprio=10 blocked_ns=5000000000 timeout=0 owner_pid=30 owner_tid=1
+proc pid=31 name=logger
+thr pid=31 tid=1 state=REPLY prio=10 rprio=10 blocked_ns=5000000000 timeout=0 srv_pid=30 srv_chid=1
+conn pid=30 coid=3 srv_pid=31 srv_chid=1
+conn pid=31 coid=3 srv_pid=30 srv_chid=1

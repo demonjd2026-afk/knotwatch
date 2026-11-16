@@ -219,6 +219,12 @@ static void scan_once(void)
                      "not readable.\n",
                      stats.procs_skipped, stats.conns_skipped);
     }
+    if (stats.locks_unknown != 0) {
+        kw_sb_printf(&text,
+                     "\n%u threads wait for a mutex whose owner could not be "
+                     "determined; they are treated as not stuck.\n",
+                     stats.locks_unknown);
+    }
     node_publish(&state.nodes[NODE_REPORT], &text);
     kw_render_json(&r, &text);
     node_publish(&state.nodes[NODE_JSON], &text);
