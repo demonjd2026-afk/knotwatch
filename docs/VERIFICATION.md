@@ -28,6 +28,22 @@ with `scripts/qnx-image.sh` and `scripts/qemu-run.sh`.
   been blocked for about 21 s.
 - `knotwatch scan` exits with status 2 while the deadlock is present.
 - New and cleared findings are printed as they change.
+- `/dev/knotwatch` lists four read-only files (`report`, `json`, `dot`,
+  `snapshot`) with sizes that match what a read returns.
+- The published `snapshot` replays through `knotwatch analyze` on the target
+  and gives the same verdict (exit status 2).
+- `knotwatch capture` sees every thread: 101, against 102 in a `pidin` taken
+  a moment later that also counts `pidin` itself.
+- A reader that keeps `report` open across several scans gets one complete,
+  consistent report.
+- slog2 receives each new and cleared finding (`slog2info -b knotwatch`).
+- `debug_thread_t.timeout`: `<sys/states.h>` documents it as a bit per state
+  with a kernel timeout armed. In a live capture it was set only on a
+  sleeping thread and clear on every SEND, REPLY and JOIN-blocked thread.
+- Without root, no process is readable. knotwatch now reports that as an
+  error instead of an empty, clean-looking report.
+- The `ignore` rule in `demo/demo.contract` silences the stock-services
+  notice.
 - Noise on a stock image, two cases found:
   - The process manager and the disk driver hold connections to each other.
     Edges starting at `procnto` are now excluded; confirmed gone on re-run.
@@ -38,18 +54,11 @@ with `scripts/qnx-image.sh` and `scripts/qemu-run.sh`.
 
 ## Still to verify on QNX
 
-1. `knotwatch capture` output against `pidin` for a whole system, not only
-   the two demo threads.
-2. Behaviour without root: which processes and connection lists become
-   unreadable, and that the scan says so.
-3. `debug_thread_t.timeout`: `collect.c` treats a non-zero value as "a kernel
-   timeout is armed". It is zero for the deadlocked demo threads, as
-   expected, but a thread blocked after `TimerTimeout()` has not been checked.
-   If the field means something else, deadlocks could be missed.
-4. The other files under `/dev/knotwatch` (`json`, `dot`, `snapshot`), two
-   readers at once, and a reader that stays open across several scans.
-5. slog2 output: `slog2info -b knotwatch`.
-6. aarch64le, and real hardware.
+1. A thread blocked in `MsgSend()` after `TimerTimeout()`: confirm it is
+   treated as alive.
+2. Running as a non-root user that has been granted `xprocess_query`.
+3. Two readers of `/dev/knotwatch` files at the same time.
+4. aarch64le, and real hardware.
 
 ## Planned next
 

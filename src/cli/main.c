@@ -219,6 +219,16 @@ static int collect_or_complain(kw_snapshot *snap)
         kw_snapshot_free(snap);
         return -1;
     }
+    if (snap->n_procs == 0) {
+        /* Reporting "no findings" for a system we could not see would be a
+         * false all-clear. */
+        fprintf(stderr,
+                "knotwatch: no process was readable (%u skipped); run as root "
+                "or with the xprocess_query ability\n",
+                stats.procs_skipped);
+        kw_snapshot_free(snap);
+        return -1;
+    }
     if (stats.procs_skipped != 0 || stats.conns_skipped != 0) {
         fprintf(stderr,
                 "knotwatch: partial scan: %u processes and %u connection lists "

@@ -196,6 +196,13 @@ static void scan_once(void)
         kw_snapshot_free(&snap);
         return;
     }
+    if (snap.n_procs == 0) {
+        /* Keep the last good results rather than publish a false all-clear. */
+        log_event(SLOG2_ERROR, "scan failed",
+                  "no process was readable; run as root or with xprocess_query");
+        kw_snapshot_free(&snap);
+        return;
+    }
 
     kw_findings findings;
     kw_findings_init(&findings);

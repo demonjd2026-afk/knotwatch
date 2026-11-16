@@ -32,57 +32,51 @@ static uint64_t now_ns(void)
     return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
 }
 
+/* Names for the kernel thread states of QNX OS 8.0 (<sys/states.h>). */
 static void state_name(unsigned state, char *out, size_t out_size)
 {
-    const char *name = NULL;
-    switch (state) {
-    case STATE_DEAD:
-        name = "DEAD";
-        break;
-    case STATE_RUNNING:
-        name = "RUNNING";
-        break;
-    case STATE_READY:
-        name = "READY";
-        break;
-    case STATE_STOPPED:
-        name = "STOPPED";
-        break;
-    case STATE_SEND:
-        name = "SEND";
-        break;
-    case STATE_RECEIVE:
-        name = "RECEIVE";
-        break;
-    case STATE_REPLY:
-        name = "REPLY";
-        break;
-    case STATE_SIGWAITINFO:
-        name = "SIGWAITINFO";
-        break;
-    case STATE_NANOSLEEP:
-        name = "NANOSLEEP";
-        break;
-    case STATE_MUTEX:
-        name = "MUTEX";
-        break;
-    case STATE_CONDVAR:
-        name = "CONDVAR";
-        break;
-    case STATE_JOIN:
-        name = "JOIN";
-        break;
-    case STATE_SEM:
-        name = "SEM";
-        break;
-    default:
-        break;
+    static const struct {
+        unsigned state;
+        const char *name;
+    } names[] = {
+        {STATE_DEAD, "DEAD"},
+        {STATE_RUNNING, "RUNNING"},
+        {STATE_READY, "READY"},
+        {STATE_STOPPED, "STOPPED"},
+        {STATE_SEND, "SEND"},
+        {STATE_RECEIVE, "RECEIVE"},
+        {STATE_REPLY, "REPLY"},
+        {STATE_MQ_SEND, "MQ_SEND"},
+        {STATE_MQ_RECEIVE, "MQ_RECEIVE"},
+        {STATE_WAITPAGE, "WAITPAGE"},
+        {STATE_SIGSUSPEND, "SIGSUSPEND"},
+        {STATE_SIGWAITINFO, "SIGWAITINFO"},
+        {STATE_NANOSLEEP, "NANOSLEEP"},
+        {STATE_MUTEX, "MUTEX"},
+        {STATE_CONDVAR, "CONDVAR"},
+        {STATE_JOIN, "JOIN"},
+        {STATE_INTR, "INTR"},
+        {STATE_SEM, "SEM"},
+        {STATE_WAITCTX, "WAITCTX"},
+        {STATE_RWLOCK_READ, "RWLOCK_READ"},
+        {STATE_RWLOCK_WRITE, "RWLOCK_WRITE"},
+        {STATE_BARRIER, "BARRIER"},
+        {STATE_PIPE, "PIPE"},
+        {STATE_CREATE, "CREATE"},
+        {STATE_DESTROY, "DESTROY"},
+        {STATE_MUON_MUTEX, "MUON_MUTEX"},
+        {STATE_TRACEBUFFER, "TRACEBUFFER"},
+        {STATE_INTR_ATTACH_EV, "INTR_ATTACH_EV"},
+        {STATE_TIMER_DELEGATE, "TIMER_DELEGATE"},
+        {STATE_SEND_NOTIFY, "SEND_NOTIFY"},
+    };
+    for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
+        if (names[i].state == state) {
+            snprintf(out, out_size, "%s", names[i].name);
+            return;
+        }
     }
-    if (name != NULL) {
-        snprintf(out, out_size, "%s", name);
-    } else {
-        snprintf(out, out_size, "STATE%u", state);
-    }
+    snprintf(out, out_size, "STATE%u", state);
 }
 
 /* Process name = basename of /proc/<pid>/exefile, or "pid<N>" if unreadable. */
