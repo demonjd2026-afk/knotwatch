@@ -1,0 +1,44 @@
+knotwatch-snapshot 1
+# Example system for the report viewer: the two demo scenarios after their
+# faults, with the process names of a stock QNX 8.0 QEMU image.
+meta time_ns=71561760641 scan_ns=30700050
+proc pid=1 name=procnto-smp-instr
+thr pid=1 tid=1 state=READY prio=0 rprio=0 blocked_ns=0 timeout=0
+thr pid=1 tid=2 state=RECEIVE prio=10 rprio=10 blocked_ns=1000000 timeout=0 chid=1
+proc pid=4099 name=slogger2
+thr pid=4099 tid=1 state=RECEIVE prio=10 rprio=10 blocked_ns=5000000 timeout=0 chid=1
+proc pid=8196 name=devb-eide
+thr pid=8196 tid=1 state=RECEIVE prio=21 rprio=21 blocked_ns=5000000 timeout=0 chid=1
+proc pid=12293 name=fsevmgr
+thr pid=12293 tid=1 state=RECEIVE prio=10 rprio=10 blocked_ns=5000000 timeout=0 chid=1
+proc pid=20488 name=sh
+thr pid=20488 tid=1 state=SIGSUSPEND prio=10 rprio=10 blocked_ns=9000000000 timeout=0
+proc pid=315411 name=knotwatch
+thr pid=315411 tid=1 state=RUNNING prio=10 rprio=10 blocked_ns=0 timeout=0
+proc pid=327700 name=wheel_sensor
+thr pid=327700 tid=1 state=SEND prio=10 rprio=10 blocked_ns=37000000000 timeout=0 srv_pid=339989 srv_chid=1
+proc pid=339989 name=brake_ctl
+thr pid=339989 tid=1 state=REPLY prio=10 rprio=10 blocked_ns=37000000000 timeout=0 srv_pid=327700 srv_chid=1
+proc pid=401430 name=logger
+thr pid=401430 tid=1 state=REPLY prio=10 rprio=10 blocked_ns=11900000000 timeout=0 srv_pid=413719 srv_chid=1
+proc pid=413719 name=motor_ctl
+thr pid=413719 tid=1 state=REPLY prio=10 rprio=10 blocked_ns=11900000000 timeout=0 srv_pid=401430 srv_chid=1
+thr pid=413719 tid=2 state=MUTEX prio=10 rprio=10 blocked_ns=11900000000 timeout=0 owner_pid=413719 owner_tid=1
+conn pid=4099 coid=1073741824 srv_pid=1 srv_chid=1
+conn pid=8196 coid=1073741824 srv_pid=1 srv_chid=1
+conn pid=8196 coid=1073741825 srv_pid=12293 srv_chid=1
+conn pid=12293 coid=1073741824 srv_pid=1 srv_chid=1
+conn pid=12293 coid=3 srv_pid=8196 srv_chid=1
+conn pid=20488 coid=0 srv_pid=8196 srv_chid=1
+conn pid=20488 coid=1073741824 srv_pid=1 srv_chid=1
+conn pid=315411 coid=1073741824 srv_pid=1 srv_chid=1
+conn pid=315411 coid=3 srv_pid=4099 srv_chid=1
+conn pid=327700 coid=1073741824 srv_pid=1 srv_chid=1
+conn pid=327700 coid=3 srv_pid=339989 srv_chid=1
+conn pid=339989 coid=1073741824 srv_pid=1 srv_chid=1
+conn pid=339989 coid=3 srv_pid=327700 srv_chid=1
+conn pid=401430 coid=1073741824 srv_pid=1 srv_chid=1
+conn pid=401430 coid=3 srv_pid=413719 srv_chid=1
+conn pid=401430 coid=4 srv_pid=4099 srv_chid=1
+conn pid=413719 coid=1073741824 srv_pid=1 srv_chid=1
+conn pid=413719 coid=3 srv_pid=401430 srv_chid=1

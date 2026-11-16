@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>knotwatch report</title>
+<style>
+  :root {
+    --paper: #eef2f5;
+    --panel: #ffffff;
+    --ink: #14253d;
+    --steel: #5b6b7f;
+    --line: #c9d3dd;
+    --stuck: #c2301c;
+    --stuck-tint: #fbe4df;
+    --warn: #a8650a;
+    --warn-tint: #fbefd5;
+    --ok: #0f766e;
+    --sans: "Avenir Next", "Segoe UI Variable Display", "Segoe UI", "Helvetica Neue",
+            system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 16px/1.5 var(--sans);
+    font-variant-numeric: tabular-nums;
+  }
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px 32px;
+    padding: 28px 32px 20px;
+  }
+  h1 {
+    margin: 0;
+    font-size: clamp(1.6rem, 1.1rem + 1.8vw, 2.5rem);
+    line-height: 1.12;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+    max-width: 24ch;
+  }
+  h1.critical { color: var(--stuck); }
+  h1.warning { color: var(--warn); }
+  h1.clean { color: var(--ok); }
+  #scan { margin: 8px 0 0; color: var(--steel); }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  button, .file {
+    font: inherit;
+    font-weight: 550;
+    color: var(--ink);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 8px 14px;
+    cursor: pointer;
+  }
+  button:hover, .file:hover { border-color: var(--ink); }
+  button:focus-visible, .file:focus-within, label.toggle:focus-within {
+    outline: 3px solid var(--ok);
+    outline-offset: 2px;
+  }
+  .file input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  main {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(300px, 2fr);
+    gap: 20px;
+    padding: 0 32px 32px;
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; padding: 0 16px 24px; }
+    header { padding: 20px 16px 16px; }
+  }
+  section.graph { position: sticky; top: 16px; }
+  @media (max-width: 900px) { section.graph { position: static; } }
+  section {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  h2 { margin: 0; font-size: 1.05rem; font-weight: 650; }
+  .bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 20px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--line);
+  }
+  label.toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--steel);
+                 font-size: 0.9rem; cursor: pointer; border-radius: 4px; }
+  #graph { display: block; width: 100%; height: auto; }
+  #legend {
+    display: flex; flex-wrap: wrap; gap: 6px 22px;
+    margin: 0; padding: 12px 18px 16px; list-style: none;
+    border-top: 1px solid var(--line);
+    color: var(--steel); font-size: 0.88rem;
+  }
+  #legend svg { vertical-align: middle; margin-right: 6px; }
+  #findings { list-style: none; margin: 0; padding: 0; }
+  #findings li + li { border-top: 1px solid var(--line); }
+  .finding {
+    display: block; width: 100%; text-align: left;
+    border: 0; border-radius: 0; background: none;
+    padding: 14px 18px 14px 15px;
+    border-left: 4px solid transparent;
+  }
+  .finding:hover { background: var(--paper); border-color: transparent; }
+  .finding[aria-pressed="true"] { background: var(--paper); }
+  .finding.critical { border-left-color: var(--stuck); }
+  .finding.warning { border-left-color: var(--warn); }
+  .finding.notice { border-left-color: var(--line); }
+  .kind { font-weight: 650; }
+  .critical .kind { color: var(--stuck); }
+  .warning .kind { color: var(--warn); }
+  .notice .kind { color: var(--steel); }
+  .summary { display: block; font-weight: 400; margin-top: 2px; }
+  .details {
+    display: block; margin-top: 8px;
+    font: 0.8rem/1.55 var(--mono); font-weight: 400;
+    color: var(--steel); white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .empty { padding: 18px; color: var(--steel); margin: 0; }
+  #error {
+    margin: 0 32px 16px; padding: 12px 16px; border-radius: 8px;
+    background: var(--stuck-tint); color: var(--stuck); font-weight: 550;
+  }
+  #error[hidden] { display: none; }
+  body.dragging { outline: 4px dashed var(--ok); outline-offset: -8px; }
+
+  /* graph marks */
+  .node rect { fill: var(--panel); stroke: var(--ink); stroke-width: 1.2; }
+  .node text { font: 600 13px var(--sans); fill: var(--ink); text-anchor: middle;
+               dominant-baseline: central; }
+  .node.critical rect { fill: var(--stuck-tint); stroke: var(--stuck); stroke-width: 2; }
+  .node.critical text { fill: var(--stuck); }
+  .node.warning rect { fill: var(--warn-tint); stroke: var(--warn); stroke-width: 1.6; }
+  .edge { fill: none; stroke: var(--ink); stroke-width: 1.4; }
+  .edge.unused { stroke: var(--steel); stroke-dasharray: 5 4; stroke-width: 1.1; }
+  .edge.critical { stroke: var(--stuck); stroke-width: 2.4; }
+  .edge.warning { stroke: var(--warn); stroke-width: 1.8; }
+  .dim { opacity: 0.16; }
+  .node, .edge { transition: opacity 120ms; }
+  @media (prefers-reduced-motion: reduce) { .node, .edge { transition: none; } }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1 id="verdict">Open a knotwatch report</h1>
+    <p id="scan">Drop a JSON report on this page, or open one. Make one with
+      <code>knotwatch scan --format json</code> on the target.</p>
+  </div>
+  <div class="actions">
+    <label class="file">Open report<input type="file" id="file" accept=".json,application/json"></label>
+    <button type="button" id="example">Show the example</button>
+  </div>
+</header>
+<p id="error" role="alert" hidden></p>
+<main>
+  <section class="graph" aria-labelledby="graph-title">
+    <div class="bar">
+      <h2 id="graph-title">Who sends to whom</h2>
+      <div>
+        <label class="toggle"><input type="checkbox" id="only-findings"> Only processes with findings</label>
+        &nbsp;
+        <label class="toggle"><input type="checkbox" id="show-procnto"> Show the process manager</label>
+      </div>
+    </div>
+    <svg id="graph" role="img" aria-labelledby="graph-title"></svg>
+    <ul id="legend">
+      <li>Servers are drawn above their clients, so a healthy arrow points up.</li>
+      <li><svg width="34" height="8"><line x1="0" y1="4" x2="34" y2="4" stroke="#14253d" stroke-width="1.6"/></svg>send observed</li>
+      <li><svg width="34" height="8"><line x1="0" y1="4" x2="34" y2="4" stroke="#5b6b7f" stroke-width="1.2" stroke-dasharray="5 4"/></svg>connection only</li>
+      <li><svg width="34" height="8"><line x1="0" y1="4" x2="34" y2="4" stroke="#c2301c" stroke-width="2.6"/></svg>stuck</li>
+      <li><svg width="34" height="8"><line x1="0" y1="4" x2="34" y2="4" stroke="#a8650a" stroke-width="2"/></svg>hierarchy problem</li>
+    </ul>
+  </section>
+  <section aria-labelledby="findings-title">
+    <div class="bar"><h2 id="findings-title">Findings</h2></div>
+    <ul id="findings"></ul>
+  </section>
+</main>
+
+<script type="application/json" id="example-data">__EXAMPLE_JSON__</script>
+<script>
+"use strict";
+const SVG = "http://www.w3.org/2000/svg";
+const KIND_LABEL = {
+  "deadlock": "Deadlock",
+  "blocking-cycle": "Blocking cycle",
+  "mutual-send": "Send cycle observed",
+  "contract": "Contract broken",
+  "potential-cycle": "Possible cycle",
+};
+const RANK = { notice: 0, warning: 1, critical: 2 };
+let report = null;
+let selected = -1;
+
+const $ = (id) => document.getElementById(id);
+function el(name, attrs, parent) {
+  const node = document.createElementNS(SVG, name);
+  for (const key in attrs) node.setAttribute(key, attrs[key]);
+  if (parent) parent.appendChild(node);
+  return node;
+}
+
+/* ---- loading ---------------------------------------------------------- */
+function check(data) {
+  const ok = data && Array.isArray(data.findings) && data.graph &&
+             Array.isArray(data.graph.nodes) && Array.isArray(data.graph.edges);
+  if (!ok) throw new Error("This file is not a knotwatch JSON report.");
+  return data;
+}
+function load(text) {
+  try {
+    report = check(JSON.parse(text));
+    selected = -1;
+    $("error").hidden = true;
+    render();
+  } catch (err) {
+    $("error").textContent = err instanceof SyntaxError
+      ? "This file is not valid JSON. Open the output of knotwatch with --format json."
+      : err.message;
+    $("error").hidden = false;
+  }
+}
+$("file").addEventListener("change", (ev) => {
+  const file = ev.target.files[0];
+  if (file) file.text().then(load);
+});
+$("example").addEventListener("click", () => load($("example-data").textContent));
+window.addEventListener("dragover", (ev) => { ev.preventDefault(); document.body.classList.add("dragging"); });
+window.addEventListener("dragleave", () => document.body.classList.remove("dragging"));
+window.addEventListener("drop", (ev) => {
+  ev.preventDefault();
+  document.body.classList.remove("dragging");
+  const file = ev.dataTransfer.files[0];
+  if (file) file.text().then(load);
+});
+$("show-procnto").addEventListener("change", render);
+$("only-findings").addEventListener("change", render);
+
+/* ---- header and findings ---------------------------------------------- */
+function plural(n, word) { return n + " " + word + (n === 1 ? "" : "s"); }
+
+function renderVerdict() {
+  const count = (kind) => report.findings.filter((f) => f.kind === kind).length;
+  const stuck = count("deadlock") + count("blocking-cycle");
+  const hierarchy = count("mutual-send") + count("contract");
+  const h1 = $("verdict");
+  if (stuck > 0) {
+    h1.textContent = plural(stuck, "deadlock") + " on this system";
+    h1.className = "critical";
+  } else if (hierarchy > 0) {
+    h1.textContent = "No deadlock, but the send hierarchy is broken";
+    h1.className = "warning";
+  } else if (report.findings.length > 0) {
+    h1.textContent = "No deadlock. " + plural(report.findings.length, "thing") + " to review";
+    h1.className = "";
+  } else {
+    h1.textContent = "No deadlock and no send cycles";
+    h1.className = "clean";
+  }
+  const ms = Math.round((report.scan_ns || 0) / 1e6);
+  $("scan").textContent = "Scanned " + plural(report.processes, "process").replace("processs", "processes") +
+    ", " + plural(report.threads, "thread") + " and " + plural(report.connections, "connection") +
+    " in " + ms + " ms.";
+}
+
+function renderFindings() {
+  const list = $("findings");
+  list.textContent = "";
+  if (report.findings.length === 0) {
+    const p = document.createElement("p");
+    p.className = "empty";
+    p.textContent = "Nothing is stuck, and no process sends back down to its clients.";
+    list.appendChild(p);
+    return;
+  }
+  report.findings.forEach((f, i) => {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "finding " + f.severity;
+    btn.setAttribute("aria-pressed", String(i === selected));
+    const kind = document.createElement("span");
+    kind.className = "kind";
+    kind.textContent = KIND_LABEL[f.kind] || f.kind;
+    const summary = document.createElement("span");
+    summary.className = "summary";
+    summary.textContent = f.summary;
+    btn.append(kind, summary);
+    if (f.details && f.details.length) {
+      const details = document.createElement("span");
+      details.className = "details";
+      details.textContent = f.details.join("\n");
+      btn.appendChild(details);
+    }
+    btn.addEventListener("click", () => {
+      selected = selected === i ? -1 : i;
+      render();
+    });
+    li.appendChild(btn);
+    list.appendChild(li);
+  });
+}
+
+/* ---- graph ------------------------------------------------------------ */
+function worstFor(names) {
+  let worst = null;
+  for (const f of report.findings) {
+    if (names.every((n) => f.processes.includes(n)) &&
+        (worst === null || RANK[f.severity] > RANK[worst])) {
+      worst = f.severity;
+    }
+  }
+  return worst;
+}
+
+/* Strongly connected components (Tarjan), iterative. */
+function components(n, adj) {
+  const index = new Array(n).fill(-1), low = new Array(n).fill(0);
+  const comp = new Array(n).fill(-1), onStack = new Array(n).fill(false);
+  const stack = [];
+  let counter = 0, nComp = 0;
+  for (let root = 0; root < n; root++) {
+    if (index[root] !== -1) continue;
+    const call = [[root, 0]];
+    index[root] = low[root] = counter++;
+    stack.push(root); onStack[root] = true;
+    while (call.length) {
+      const frame = call[call.length - 1];
+      const v = frame[0];
+      if (frame[1] < adj[v].length) {
+        const w = adj[v][frame[1]++];
+        if (index[w] === -1) {
+          index[w] = low[w] = counter++;
+          stack.push(w); onStack[w] = true;
+          call.push([w, 0]);
+        } else if (onStack[w]) {
+          low[v] = Math.min(low[v], index[w]);
+        }
+        continue;
+      }
+      if (low[v] === index[v]) {
+        let w;
+        do { w = stack.pop(); onStack[w] = false; comp[w] = nComp; } while (w !== v);
+        nComp++;
+      }
+      call.pop();
+      if (call.length) {
+        const parent = call[call.length - 1][0];
+        low[parent] = Math.min(low[parent], low[v]);
+      }
+    }
+  }
+  return { comp, nComp };
+}
+
+function layout() {
+  const showManager = $("show-procnto").checked;
+  const onlyFindings = $("only-findings").checked;
+  const inFinding = new Set(report.findings.flatMap((f) => f.processes));
+  const isManager = (name) => name.startsWith("procnto");
+
+  let edges = report.graph.edges.filter((e) => e.from !== e.to);
+  if (!showManager) edges = edges.filter((e) => !isManager(e.from) && !isManager(e.to));
+  if (onlyFindings) edges = edges.filter((e) => inFinding.has(e.from) && inFinding.has(e.to));
+
+  const names = [...new Set(edges.flatMap((e) => [e.from, e.to]))];
+  const id = new Map(names.map((name, i) => [name, i]));
+  const adj = names.map(() => []);
+  for (const e of edges) adj[id.get(e.from)].push(id.get(e.to));
+
+  /* Row = how far a process is from a pure server. Processes in one cycle
+     share a row, so a cycle shows up as arrows running sideways. */
+  const { comp, nComp } = components(names.length, adj);
+  const row = new Array(nComp).fill(-1);
+  const rowOf = (c) => {
+    if (row[c] !== -1) return row[c];
+    row[c] = 0;
+    let best = 0;
+    for (let v = 0; v < names.length; v++) {
+      if (comp[v] !== c) continue;
+      for (const w of adj[v]) if (comp[w] !== c) best = Math.max(best, rowOf(comp[w]) + 1);
+    }
+    return (row[c] = best);
+  };
+  const rows = [];
+  names.forEach((name, v) => {
+    const r = rowOf(comp[v]);
+    (rows[r] = rows[r] || []).push(v);
+  });
+
+  /* Order each row by the average position of what it talks to above, but
+     keep the members of one cycle next to each other. */
+  const pos = new Array(names.length).fill(0);
+  rows.forEach((members, r) => {
+    const mean = (v) => {
+      const up = adj[v].filter((w) => rowOf(comp[w]) < r).map((w) => pos[w]);
+      return up.length ? up.reduce((s, x) => s + x, 0) / up.length : null;
+    };
+    const groups = new Map();
+    for (const v of members) {
+      if (!groups.has(comp[v])) groups.set(comp[v], []);
+      groups.get(comp[v]).push(v);
+    }
+    const ordered = [...groups.values()].map((group) => {
+      group.sort((a, b) => names[a].localeCompare(names[b]));
+      const means = group.map(mean).filter((m) => m !== null);
+      const key = means.length ? means.reduce((s, x) => s + x, 0) / means.length : 1e9;
+      return { group, key, cycle: group.length > 1 };
+    });
+    ordered.sort((a, b) => a.key - b.key || (b.cycle - a.cycle) ||
+                           names[a.group[0]].localeCompare(names[b.group[0]]));
+    members.length = 0;
+    for (const o of ordered) members.push(...o.group);
+    members.forEach((v, i) => { pos[v] = i; });
+  });
+
+  const W = 760, rowGap = 112, top = 62, boxH = 34;
+  const width = (v) => Math.max(84, names[v].length * 8 + 28);
+  const nodes = [];
+  rows.forEach((members, r) => {
+    const total = members.reduce((s, v) => s + width(v), 0);
+    const gap = Math.max(22, Math.min(70, (W - 40 - total) / Math.max(1, members.length)));
+    let x = (W - (total + gap * (members.length - 1))) / 2;
+    for (const v of members) {
+      nodes[v] = { name: names[v], x: x + width(v) / 2, y: top + r * rowGap, w: width(v), h: boxH };
+      x += width(v) + gap;
+    }
+  });
+  return { nodes, edges, id, height: top + Math.max(0, rows.length - 1) * rowGap + boxH + 46, W };
+}
+
+function edgePath(a, b, bend) {
+  if (Math.abs(a.y - b.y) > 1) {            /* between rows */
+    const up = b.y < a.y;
+    const y1 = a.y + (up ? -a.h / 2 : a.h / 2), y2 = b.y + (up ? b.h / 2 + 5 : -b.h / 2 - 5);
+    const mid = (y1 + y2) / 2;
+    return `M${a.x},${y1} C${a.x},${mid} ${b.x},${mid} ${b.x},${y2}`;
+  }
+  /* same row: an arc, above for one direction and below for the other */
+  const right = b.x > a.x;
+  const x1 = a.x + (right ? a.w / 2 : -a.w / 2), x2 = b.x + (right ? -b.w / 2 - 5 : b.w / 2 + 5);
+  const lift = (right ? -1 : 1) * (26 + Math.abs(x2 - x1) * 0.18) * bend;
+  const y = a.y + (right ? -7 : 7);
+  return `M${x1},${y} C${x1 + (x2 - x1) * 0.25},${y + lift} ${x1 + (x2 - x1) * 0.75},${y + lift} ${x2},${y}`;
+}
+
+function renderGraph() {
+  const svg = $("graph");
+  svg.textContent = "";
+  const g = layout();
+  svg.setAttribute("viewBox", `0 0 ${g.W} ${Math.max(g.height, 160)}`);
+  if (g.nodes.length === 0) {
+    const t = el("text", { x: g.W / 2, y: 80, "text-anchor": "middle", fill: "#5b6b7f" }, svg);
+    t.textContent = "No sends or connections between processes to draw.";
+    return;
+  }
+  const colors = { plain: "#14253d", unused: "#5b6b7f", critical: "#c2301c", warning: "#a8650a" };
+  const defs = el("defs", {}, svg);
+  for (const key in colors) {
+    const m = el("marker", { id: "arrow-" + key, viewBox: "0 0 10 10", refX: 8, refY: 5,
+                             markerWidth: 7, markerHeight: 7, orient: "auto-start-reverse" }, defs);
+    el("path", { d: "M0 0L10 5L0 10z", fill: colors[key] }, m);
+  }
+  const focus = selected >= 0 ? new Set(report.findings[selected].processes) : null;
+
+  for (const e of g.edges) {
+    const sev = worstFor([e.from, e.to]);
+    const marked = sev === "critical" || sev === "warning";
+    const style = marked ? sev : e.observed ? "plain" : "unused";
+    const path = el("path", {
+      d: edgePath(g.nodes[g.id.get(e.from)], g.nodes[g.id.get(e.to)], 1),
+      class: "edge " + (marked ? sev : "") + (e.observed ? "" : " unused"),
+      "marker-end": `url(#arrow-${style})`,
+    }, svg);
+    if (focus && !(focus.has(e.from) && focus.has(e.to))) path.classList.add("dim");
+    el("title", {}, path).textContent = `${e.from} to ${e.to}: ` +
+      (e.observed ? "send observed" : "connection only");
+  }
+  for (const n of g.nodes) {
+    const sev = worstFor([n.name]);
+    const group = el("g", { class: "node " + (sev === "critical" || sev === "warning" ? sev : "") }, svg);
+    el("rect", { x: n.x - n.w / 2, y: n.y - n.h / 2, width: n.w, height: n.h, rx: 7 }, group);
+    el("text", { x: n.x, y: n.y }, group).textContent = n.name;
+    if (focus && !focus.has(n.name)) group.classList.add("dim");
+  }
+}
+
+function render() {
+  renderVerdict();
+  renderFindings();
+  renderGraph();
+}
+</script>
+</body>
+</html>

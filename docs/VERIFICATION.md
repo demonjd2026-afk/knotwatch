@@ -69,5 +69,4 @@ with `scripts/qnx-image.sh` and `scripts/qemu-run.sh`.
 
 - Run as a non-root user with only the abilities it needs, with a security
   policy.
-- A host-side HTML viewer for the JSON report.
 - A CI recipe that boots QEMU, runs a workload and gates on `knotwatch scan`.

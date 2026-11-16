@@ -153,6 +153,23 @@ build/knotwatch analyze system.kws --format json
 Exit status: 0 clean or notices only, 1 warnings, 2 deadlock or blocking
 cycle. That makes `knotwatch scan` usable as a gate in a QEMU-based CI job.
 
+## Report viewer
+
+`viewer/index.html` is a single self-contained page that draws a JSON report:
+the send graph with servers above their clients, and the findings beside it.
+Selecting a finding highlights the processes involved. Open the file in a
+browser, then drop a report on it or choose "Show the example".
+
+![report viewer](docs/viewer.png)
+
+```sh
+knotwatch scan --format json > report.json        # on the target
+build/knotwatch analyze system.kws --format json  # or from a snapshot, on any host
+```
+
+The page is generated from `viewer/template.html` by `scripts/make-viewer.sh`,
+which embeds a real report of `viewer/example.kws` as the example.
+
 ## Where QNX is used
 
 | What | Where |
