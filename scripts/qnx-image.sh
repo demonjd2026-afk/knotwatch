@@ -4,6 +4,8 @@
 #
 #   scripts/qnx-image.sh          # from macOS: builds, then makes build/vm
 #   scripts/qnx-image.sh verify   # same, plus extra on-target checks at boot
+#   scripts/qnx-image.sh plain    # nothing runs at boot; drive it yourself
+#                                 # with scripts/qemu-run.sh console
 #
 # Output: build/vm/output/ifs.bin and build/vm/output/disk-qemu.vmdk.
 # Boot it with scripts/qemu-run.sh.
@@ -110,6 +112,9 @@ echo "kwdemo: unprivileged scan finished"
 BOOT
 fi
 echo 'echo "kwdemo: done"' >> "$VM/local/snippets/post_start.custom"
+if [ "$MODE" = "plain" ]; then
+    : > "$VM/local/snippets/post_start.custom"
+fi
 
 cd "$VM"
 mkqnximage --type=qemu --arch=x86_64 --noprompt --ssh-ident=none \

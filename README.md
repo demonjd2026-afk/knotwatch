@@ -46,9 +46,33 @@ same run had already reported:
   `scripts/qnx-image.sh` then `scripts/qemu-run.sh`.
 - The portable core (snapshot format, analysis, contract, renderers, CLI) is
   tested on Linux with `make check`, also clean under ASan and UBSan.
+- An MCP server (`agent/knotwatch_mcp.py`) lets AI coding assistants query
+  the reports. It is tested on Linux, including against the official MCP
+  client library.
 - Not yet run on aarch64 or on hardware.
   [docs/VERIFICATION.md](docs/VERIFICATION.md) lists what has been confirmed
   on a target and what has not.
+
+## Why it matters
+
+A send-hierarchy deadlock does not crash and does not log. The system, or a
+part of it, simply stops answering. Finding the cause by hand goes like this:
+
+1. Run `pidin` and pick out the SEND- and REPLY-blocked threads among every
+   thread on the system.
+2. For each one, look up the process it is blocked on, and check *every*
+   thread of that process, because any of them could still reply.
+3. If one of those is MUTEX-blocked, find the thread that holds the lock and
+   see what that thread is blocked on in turn.
+4. Repeat until the chain closes into a cycle, then convince yourself that it
+   is permanent and not just slow.
+
+knotwatch does those steps on every scan. In the recorded demo run the fault
+fired and the deadlock was reported one second later, with the threads, what
+each waits on, and the statement that nothing can unblock them. The design
+fault behind it (a connection that goes up the hierarchy) had been reported
+while the system was still healthy, and `knotwatch scan` exits with status 2
+so an automated test fails instead of hanging.
 
 ## How it works
 
@@ -159,6 +183,7 @@ cycle. That makes `knotwatch scan` usable as a gate in a QEMU-based CI job.
 the send graph with servers above their clients, and the findings beside it.
 Selecting a finding highlights the processes involved. Open the file in a
 browser, then drop a report on it or choose "Show the example".
+The screenshot shows the example with "Only processes with findings" ticked.
 
 ![report viewer](docs/viewer.png)
 
@@ -168,7 +193,58 @@ build/knotwatch analyze system.kws --format json  # or from a snapshot, on any h
 ```
 
 The page is generated from `viewer/template.html` by `scripts/make-viewer.sh`,
-which embeds a real report of `viewer/example.kws` as the example.
+which embeds `viewer/example.json` as the example. That file is a real
+report, read from `/dev/knotwatch/json` on QNX OS 8.0.0 with both demo
+scenarios deadlocked.
+
+## AI assistants
+
+`agent/knotwatch_mcp.py` is a small [Model Context Protocol](https://modelcontextprotocol.io)
+server. It gives an AI coding assistant three read-only tools, so the
+assistant can check a QNX system while it works on the code:
+
+| Tool | Answers |
+| --- | --- |
+| `knotwatch_status` | Is anything deadlocked? One line per finding. |
+| `knotwatch_finding` | The evidence for one finding, what it means, and the usual fixes on QNX. |
+| `knotwatch_process` | Who one process sends to, and who sends to it. |
+
+It runs on the development host and needs only Python 3. Because knotwatch
+publishes its results as files, reaching a target needs no agent on the
+target, just a command that prints the file:
+
+```sh
+# a live target
+python3 agent/knotwatch_mcp.py --command 'ssh root@target cat /dev/knotwatch/json'
+# a saved report, or a snapshot analysed on the host
+python3 agent/knotwatch_mcp.py --report report.json
+python3 agent/knotwatch_mcp.py --snapshot system.kws --knotwatch build/knotwatch
+```
+
+Register one of those lines as an MCP server in your assistant. Add `--check`
+to print the status once and exit, to test the source.
+
+The server only reads. The source is fixed at start-up, tool arguments never
+reach a command line, and the command runs without a shell. Text that comes
+from the target is passed to the assistant as data, with control characters
+removed and its length capped.
+
+An answer from `knotwatch_finding` for the second demo, from the real report:
+
+```
+[critical] deadlock: 3 threads permanently blocked across 2 processes: logger, motor_ctl
+
+Evidence from the target:
+  logger[385045] thread 1 REPLY-blocked on motor_ctl[389142] channel 1 for 38.5 s (priority 10)
+  motor_ctl[389142] thread 1 REPLY-blocked on logger[385045] channel 1 for 38.5 s (priority 10)
+  motor_ctl[389142] thread 2 MUTEX-blocked on a lock held by motor_ctl[389142] thread 1 for 38.5 s (priority 10)
+  ...
+Usual fixes on QNX:
+  2. Replace the upward MsgSend() with something that does not block: a pulse
+     (MsgSendPulse()) or an event the client armed earlier (MsgDeliverEvent()).
+  3. If a thread is MUTEX-blocked in the list, a lock is held across MsgSend().
+     Copy what is needed, release the lock, then send.
+```
 
 ## Codelab
 

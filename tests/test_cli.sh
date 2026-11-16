@@ -45,6 +45,11 @@ if command -v python3 >/dev/null 2>&1; then
     done
 fi
 
+# The MCP server for AI assistants (needs python3, like the JSON check above).
+if command -v python3 >/dev/null 2>&1; then
+    python3 tests/test_agent.py "$bin" || fails=$((fails + 1))
+fi
+
 rm -f /tmp/kw_cli_out.$$ /tmp/kw_cli_err.$$
 if [ "$fails" -ne 0 ]; then
     echo "$fails CLI check(s) failed"

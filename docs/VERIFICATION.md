@@ -8,6 +8,11 @@
 - Accumulation of the send graph across scans.
 - Text, JSON (parsed by a real JSON parser) and DOT output.
 - CLI exit codes and error handling.
+- The MCP server in `agent/`: handshake, tool listing, all three tools, every
+  error path, cleaning of text from the target, and that the source command
+  is not run through a shell (`tests/test_agent.py`, part of `make check`).
+  Also driven with the official MCP Python client library (version 2.3.0),
+  using the real report in `viewer/example.json`.
 - No warnings with `-Wall -Wextra -Wpedantic -Wshadow -Wconversion`; no
   findings under AddressSanitizer and UndefinedBehaviorSanitizer.
 
@@ -69,6 +74,8 @@ with `scripts/qnx-image.sh` and `scripts/qemu-run.sh`.
 4. Mutex owners other than thread 1, a process-shared mutex held by another
    process, and the owner encoding on aarch64le.
 5. aarch64le, and real hardware.
+6. The MCP server reading from a live target over `ssh`, and its use from
+   inside a specific AI assistant. The QEMU image used so far has no network.
 
 ## Planned next
 
