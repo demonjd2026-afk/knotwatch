@@ -90,8 +90,9 @@ static void parse_contract(const char *text, kw_contract *c)
     }
 }
 
-/* A shell blocked for hours in read() is REPLY-blocked on its console driver.
- * That is normal and must not be reported. */
+/* A shell blocked for hours in read() is REPLY-blocked on its console driver,
+ * and the process manager and a driver hold connections to each other. Both
+ * are normal and must not be reported. */
 static void test_healthy(void)
 {
     run r;

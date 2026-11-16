@@ -3,3 +3,8 @@
 layer 0 procnto*
 layer 1 wheel_sensor
 layer 2 brake_ctl
+
+# Stock QNX services. On the QEMU image the disk driver and the filesystem
+# event manager hold connections to each other; that is the system's own
+# design, not part of the application under test.
+ignore devb-* fsevmgr

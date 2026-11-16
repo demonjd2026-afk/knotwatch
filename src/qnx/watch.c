@@ -247,7 +247,8 @@ int kw_watch_run(const kw_watch_config *cfg)
 {
     static resmgr_connect_funcs_t connect_funcs;
     static resmgr_io_funcs_t io_funcs;
-    static iofunc_funcs_t ocb_funcs = {_IOFUNC_NFUNCS, ocb_calloc, ocb_free};
+    static iofunc_funcs_t ocb_funcs = {
+        .nfuncs = _IOFUNC_NFUNCS, .ocb_calloc = ocb_calloc, .ocb_free = ocb_free};
     static iofunc_mount_t mount;
 
     state.cfg = cfg;
@@ -318,7 +319,7 @@ int kw_watch_run(const kw_watch_config *cfg)
         return fail("message_connect");
     }
     struct sigevent ev;
-    SIGEV_PULSE_INIT(&ev, coid, SIGEV_PULSE_PRIO_INHERIT, code, 0);
+    SIGEV_PULSE_INIT(&ev, coid, SIGEV_PULSE_PRIO_INHERIT, (short)code, 0);
     timer_t timer;
     if (timer_create(CLOCK_MONOTONIC, &ev, &timer) == -1) {
         return fail("timer_create");

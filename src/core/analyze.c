@@ -610,6 +610,15 @@ static const kw_gedge *graph_find_edge(const kw_graph *g, int from, int to)
     return NULL;
 }
 
+/* The process manager (procnto) is the microkernel itself. It holds
+ * connections to drivers and filesystems and they hold connections to it, by
+ * design, so edges that start at it say nothing about an application's send
+ * hierarchy. Edges that end at it are kept: everything may send to it. */
+static bool is_process_manager(const char *name)
+{
+    return strncmp(name, "procnto", 7) == 0;
+}
+
 /* Build a digraph over the send graph's nodes from the edges that are not
  * ignored by the contract and, if `observed_only`, were actually seen used. */
 static void hierarchy_digraph(const kw_graph *g, const kw_contract *contract,
@@ -623,7 +632,8 @@ static void hierarchy_digraph(const kw_graph *g, const kw_contract *contract,
         if (observed_only && !e->observed) {
             continue;
         }
-        if (kw_contract_ignored(contract, g->nodes[e->from].name,
+        if (is_process_manager(g->nodes[e->from].name) ||
+            kw_contract_ignored(contract, g->nodes[e->from].name,
                                 g->nodes[e->to].name)) {
             continue;
         }
@@ -728,7 +738,8 @@ static void check_contract(const kw_graph *g, const kw_contract *contract,
         const kw_gedge *e = &g->edges[i];
         const char *client = g->nodes[e->from].name;
         const char *server = g->nodes[e->to].name;
-        if (kw_contract_ignored(contract, client, server)) {
+        if (is_process_manager(client) ||
+            kw_contract_ignored(contract, client, server)) {
             continue;
         }
         int lc = kw_contract_layer(contract, client);

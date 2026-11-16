@@ -24,21 +24,31 @@ The last one is the point: the demo system is flagged while it is still
 running normally, minutes before it deadlocks.
 
 ```
-[CRITICAL] deadlock: 3 threads permanently blocked across 3 processes: wheel_sensor, brake_ctl, hmi
-  wheel_sensor[10] thread 1 SEND-blocked on brake_ctl[11] channel 1 for 4.0 s (priority 10)
-  brake_ctl[11] thread 1 REPLY-blocked on wheel_sensor[10] channel 1 for 4.0 s (priority 10)
-  hmi[12] thread 1 REPLY-blocked on brake_ctl[11] channel 1 for 2.0 s (priority 12)
+[CRITICAL] deadlock: 2 threads permanently blocked across 2 processes: wheel_sensor, brake_ctl
+  wheel_sensor[327700] thread 1 SEND-blocked on brake_ctl[339989] channel 1 for 21.0 s (priority 10)
+  brake_ctl[339989] thread 1 REPLY-blocked on wheel_sensor[327700] channel 1 for 21.0 s (priority 10)
   No thread that could unblock them is runnable or waiting for an outside event.
+```
+
+That is real output from the demo on QNX OS 8.0 in QEMU. Twenty-five seconds
+earlier, while both processes were still exchanging messages normally, the
+same run had already reported:
+
+```
+[WARNING] contract: wheel_sensor (layer 1) holds a connection to brake_ctl (layer 2)
+[NOTICE] potential-cycle: connections form a cycle, a latent deadlock if messages are sent around it: wheel_sensor -> brake_ctl -> wheel_sensor
 ```
 
 ## Status
 
+- Builds with QNX SDP 8.0 (`ntox86_64-gcc`) without warnings and runs on QNX
+  OS 8.0.0, x86_64, in QEMU. The demo scenario passes end to end:
+  `scripts/qnx-image.sh` then `scripts/qemu-run.sh`.
 - The portable core (snapshot format, analysis, contract, renderers, CLI) is
-  complete and tested on Linux: `make check`, also clean under ASan and UBSan.
-- The QNX half (`src/qnx/`, `demo/`) is written against the QNX OS 8.0
-  documentation and has **not yet been compiled or run on QNX**.
-  [docs/VERIFICATION.md](docs/VERIFICATION.md) lists exactly what has to be
-  confirmed on a target.
+  tested on Linux with `make check`, also clean under ASan and UBSan.
+- Not yet run on aarch64 or on hardware.
+  [docs/VERIFICATION.md](docs/VERIFICATION.md) lists what has been confirmed
+  on a target and what has not.
 
 ## How it works
 
@@ -76,8 +86,9 @@ A process may only send to a strictly lower layer.
 
 ## Build and run
 
-Requirements: QNX SDP 8.0 (free through QNX Everywhere), GNU make. Targets:
-QNX OS 8.0 on x86_64 or aarch64le, in QEMU or on hardware.
+Requirements: QNX SDP 8.0 (free through QNX Everywhere), GNU make. Tested
+target: QNX OS 8.0.0 on x86_64 in QEMU, built with `ntox86_64-gcc` from the
+SDP's Linux host tools. aarch64le builds the same way but is untested.
 
 ```sh
 # On the target (self-hosted QNX Developer Desktop):
@@ -86,6 +97,18 @@ make
 # Cross-compiling, with the QNX SDP 8.0 environment sourced:
 make QNX=1 CC=ntox86_64-gcc  BUILD=build/x86_64      # QEMU x86_64
 make QNX=1 CC=ntoaarch64-gcc BUILD=build/aarch64le   # Raspberry Pi, QEMU virt
+```
+
+From macOS, where the SDP tools do not run natively, the scripts below run
+them in a small Linux container (Docker) and boot the result in QEMU
+(`brew install qemu`). They expect the SDP in `~/qnx800` with the package
+"QNX SDP Host Tools (Linux 64-bit)" installed.
+
+```sh
+sh scripts/qnx-docker-build.sh   # compile -> build/x86_64
+sh scripts/qnx-image.sh          # bootable image with knotwatch and the demo
+sh scripts/qemu-run.sh           # boot it, run the demo, print the reports
+sh scripts/qemu-run.sh console   # or get an interactive console instead
 ```
 
 On the target, as root:
@@ -143,6 +166,9 @@ cycle. That makes `knotwatch scan` usable as a gate in a QEMU-based CI job.
   `ignore` it in the contract.
 - Processes are identified by executable name in the send graph, so several
   instances of one program are one node.
+- Edges that start at the process manager (`procnto`) are left out of the
+  hierarchy and contract checks. It is the microkernel, and it and the
+  drivers hold connections to each other by design.
 
 ## License
 

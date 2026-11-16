@@ -1,6 +1,6 @@
 # What is verified, and what still has to be
 
-## Verified (on Linux, `make check`)
+## Verified on Linux (`make check`)
 
 - Snapshot parsing and writing, including rejection of malformed input.
 - Deadlock, blocking-cycle, mutual-send, potential-cycle and contract
@@ -11,36 +11,45 @@
 - No warnings with `-Wall -Wextra -Wpedantic -Wshadow -Wconversion`; no
   findings under AddressSanitizer and UndefinedBehaviorSanitizer.
 
-## To verify on QNX OS 8.0 (not done yet)
+## Verified on QNX OS 8.0.0, x86_64, QEMU
 
-Everything in `src/qnx/` and `demo/` was written from the QNX 8.0 documentation
-and has never been compiled against the real headers. In order:
+Built with `ntox86_64-gcc` from QNX SDP 8.0 (build 141, Linux host tools), run
+with `scripts/qnx-image.sh` and `scripts/qemu-run.sh`.
 
-1. **It compiles.** `make QNX=1 CC=ntox86_64-gcc`. Likely friction: header
-   names, `rcvid_t`, the `iofunc_mount_t` / `iofunc_funcs_t` layout, the
-   `read64` member of `resmgr_io_funcs_t`, state names in `<sys/states.h>`.
-2. **`knotwatch capture` output is plausible.** Compare a few processes with
-   `pidin`: same thread count, same states, same blocked-on pid for SEND and
-   REPLY.
-3. **Read-only `ctl` is enough.** `collect.c` opens `/proc/<pid>/ctl` with
-   `O_RDONLY`. Confirm `DCMD_PROC_TIDSTATUS` returns unsanitised data for
-   processes of other users when run as root.
-4. **`ConnectServerInfo()` across processes.** Confirm it lists another
-   process's connections as root, and what it returns without privileges
-   (expected: the scan reports the lists as skipped).
-5. **`debug_thread_t.timeout`.** `collect.c` treats a non-zero value as "a
-   kernel timeout is armed". Confirm with a thread blocked in `MsgSend()` after
-   `TimerTimeout()` versus one without. If the field means something else,
-   deadlocks could be missed.
-6. **`nsec_since_block`.** Confirm it grows while a thread stays REPLY-blocked
-   and is small right after it blocks.
-7. **Resource manager.** `ls -l /dev/knotwatch`, `cat` each file, two readers
-   at once, a reader that stays open across several scans.
-8. **Demo.** Before the fault: `potential-cycle` plus the contract warning.
-   After: `deadlock` naming both processes. Check `slog2info -b knotwatch`.
-9. **Noise on a stock image.** Run `knotwatch scan` on the unmodified QEMU
-   image and review every `potential-cycle`. System services that hold
-   connections to each other may need default `ignore` rules.
+- Everything in `src/qnx/` and `demo/` compiles without warnings and links.
+- The resource manager starts, `/dev/knotwatch/report` appears and can be read.
+- A full scan of the stock image (22 processes, 101 threads, 225 connections)
+  takes about 30 ms under emulation.
+- Before the planted fault the demo is reported as a `potential-cycle` and a
+  contract violation; after it, as a `deadlock` naming both threads.
+- The blocked states and peers knotwatch reports for the two demo threads
+  match `pidin` (REPLY on the sensor, SEND on the controller).
+- `nsec_since_block` behaves as assumed: 21 s reported for threads that had
+  been blocked for about 21 s.
+- `knotwatch scan` exits with status 2 while the deadlock is present.
+- New and cleared findings are printed as they change.
+- Noise on a stock image, two cases found:
+  - The process manager and the disk driver hold connections to each other.
+    Edges starting at `procnto` are now excluded; confirmed gone on re-run.
+  - `devb-eide` and `fsevmgr` hold connections to each other. This is a true
+    observation about two stock services, reported as a `potential-cycle`
+    notice. It is left detectable and silenced with an `ignore` line in
+    `demo/demo.contract`.
+
+## Still to verify on QNX
+
+1. `knotwatch capture` output against `pidin` for a whole system, not only
+   the two demo threads.
+2. Behaviour without root: which processes and connection lists become
+   unreadable, and that the scan says so.
+3. `debug_thread_t.timeout`: `collect.c` treats a non-zero value as "a kernel
+   timeout is armed". It is zero for the deadlocked demo threads, as
+   expected, but a thread blocked after `TimerTimeout()` has not been checked.
+   If the field means something else, deadlocks could be missed.
+4. The other files under `/dev/knotwatch` (`json`, `dot`, `snapshot`), two
+   readers at once, and a reader that stays open across several scans.
+5. slog2 output: `slog2info -b knotwatch`.
+6. aarch64le, and real hardware.
 
 ## Planned next
 

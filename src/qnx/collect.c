@@ -106,7 +106,7 @@ static void process_name(pid_t pid, char *out, size_t out_size)
     const char *base = strrchr(exe, '/');
     base = base ? base + 1 : exe;
     if (*base != '\0') {
-        snprintf(out, out_size, "%s", base);
+        snprintf(out, out_size, "%.*s", (int)(out_size - 1), base);
     }
 }
 

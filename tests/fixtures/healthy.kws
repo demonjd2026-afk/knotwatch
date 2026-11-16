@@ -11,3 +11,5 @@ thr pid=3 tid=1 state=REPLY prio=10 rprio=10 blocked_ns=7200000000000 timeout=0 
 conn pid=3 coid=0 srv_pid=2 srv_chid=1
 conn pid=3 coid=1073741824 srv_pid=1 srv_chid=1
 conn pid=2 coid=1073741824 srv_pid=1 srv_chid=1
+# the process manager and a driver hold connections to each other: normal
+conn pid=1 coid=1073741825 srv_pid=2 srv_chid=1
