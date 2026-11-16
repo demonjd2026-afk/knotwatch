@@ -332,6 +332,38 @@ static void test_roundtrip(void)
     kw_snapshot_free(&b);
 }
 
+/* Two instances of one program deadlocked with each other are two processes,
+ * even though they share a name. */
+static void test_same_name(void)
+{
+    const char *text =
+        "knotwatch-snapshot 1\nproc pid=5 name=standoff\nproc pid=6 name=standoff\n"
+        "thr pid=5 tid=1 state=SEND prio=10 rprio=10 blocked_ns=4000000000 timeout=0 "
+        "srv_pid=6 srv_chid=1\n"
+        "thr pid=6 tid=1 state=SEND prio=10 rprio=10 blocked_ns=4000000000 timeout=0 "
+        "srv_pid=5 srv_chid=1\n";
+    kw_snapshot s;
+    kw_graph g;
+    kw_findings f;
+    char err[160];
+    kw_options opts = {.min_block_ns = KW_DEFAULT_MIN_BLOCK_NS};
+    FILE *in = fmemopen((void *)text, strlen(text), "r");
+    kw_snapshot_init(&s);
+    kw_graph_init(&g);
+    kw_findings_init(&f);
+    CHECK(kw_snapshot_read(in, &s, err, sizeof(err)) == 0);
+    fclose(in);
+    kw_graph_absorb(&g, &s);
+    kw_analyze(&s, &g, NULL, &opts, &f);
+    CHECK(f.n == 1 && f.items[0].kind == KW_F_DEADLOCK);
+    CHECK(f.n == 1 && strstr(f.items[0].summary,
+                             "2 threads permanently blocked across 2 processes: "
+                             "standoff") != NULL);
+    kw_findings_free(&f);
+    kw_graph_free(&g);
+    kw_snapshot_free(&s);
+}
+
 /* A thread without a process record gets a placeholder process. */
 static void test_orphan_thread(void)
 {
@@ -421,6 +453,7 @@ int main(int argc, char **argv)
     test_snapshot_errors();
     test_roundtrip();
     test_orphan_thread();
+    test_same_name();
     test_accumulation();
     test_render();
     if (failures != 0) {

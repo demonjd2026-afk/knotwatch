@@ -47,6 +47,11 @@ with `scripts/qnx-image.sh` and `scripts/qemu-run.sh`.
 - Mutex waits: in the second demo (`motor_ctl`, `logger`) the owner of the
   lock is found and the three-thread deadlock is reported. The owner agrees
   with `pidin` (`413719-01`). Trace with `KNOTWATCH_DEBUG_LOCKS=1`.
+- The codelab in `codelab/`: `standoff` and `whoblocks` build with
+  `ntox86_64-gcc -Wall -Wextra` without warnings, the image built by
+  `codelab/make-image.sh` boots to a root shell, and the output blocks in the
+  tutorial are from that run. knotwatch reports the codelab's deadlock too.
+- The interactive console (`scripts/qemu-run.sh console`) gives a root shell.
 - Noise on a stock image, two cases found:
   - The process manager and the disk driver hold connections to each other.
     Edges starting at `procnto` are now excluded; confirmed gone on re-run.

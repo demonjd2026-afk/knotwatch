@@ -503,13 +503,18 @@ static void find_deadlocks(const kw_snapshot *s, const kw_options *o, bool *dead
         kw_sb_init(&details);
         kw_sb_init(&names);
         kw_sb_puts(&key, "deadlock:");
-        size_t members = 0;
+        size_t members = 0, pids = 0;
+        int32_t last_pid = -1;
         for (size_t i = root; i < n; i++) {
             if (!dead[i] || uf_find(parent, i) != root) {
                 continue;
             }
             const kw_thread *t = &s->threads[i];
             const kw_proc *p = kw_snapshot_proc(s, t->pid);
+            if (t->pid != last_pid) { /* threads are sorted by pid */
+                last_pid = t->pid;
+                pids++; /* two instances of one program are two processes */
+            }
             size_t before = x->n_procs;
             finding_add_proc(x, p->name);
             if (x->n_procs != before) {
@@ -524,8 +529,8 @@ static void find_deadlocks(const kw_snapshot *s, const kw_options *o, bool *dead
         kw_strbuf summary;
         kw_sb_init(&summary);
         kw_sb_printf(&summary, "%zu thread%s permanently blocked across %zu process%s: %s",
-                     members, members == 1 ? "" : "s", x->n_procs,
-                     x->n_procs == 1 ? "" : "es", names.data);
+                     members, members == 1 ? "" : "s", pids, pids == 1 ? "" : "es",
+                     names.data);
         x->key = kw_sb_steal(&key);
         x->summary = kw_sb_steal(&summary);
         x->details = kw_sb_steal(&details);

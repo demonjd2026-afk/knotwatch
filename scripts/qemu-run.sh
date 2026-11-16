@@ -19,8 +19,11 @@ if [ ! -f "$VM/output/ifs.bin" ]; then
 fi
 cd "$VM"
 
+# -snapshot keeps the disk image untouched: every boot starts from the same
+# state, and two boots can run side by side. exec makes the background job
+# QEMU itself, so the cleanup below stops QEMU and not just a wrapper shell.
 run_qemu() {
-    qemu-system-x86_64 -smp 2 -cpu max -m 1G -no-reboot \
+    exec qemu-system-x86_64 -smp 2 -cpu max -m 1G -no-reboot -snapshot \
         -drive file=output/disk-qemu.vmdk,if=ide,id=drv0 \
         -kernel output/ifs.bin \
         -object rng-random,filename=/dev/urandom,id=rng0 \
@@ -29,7 +32,6 @@ run_qemu() {
 
 if [ "${1:-}" = "console" ]; then
     run_qemu -nographic
-    exit
 fi
 
 : > "$LOG"

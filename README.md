@@ -170,6 +170,13 @@ build/knotwatch analyze system.kws --format json  # or from a snapshot, on any h
 The page is generated from `viewer/template.html` by `scripts/make-viewer.sh`,
 which embeds a real report of `viewer/example.kws` as the example.
 
+## Codelab
+
+[codelab/README.md](codelab/README.md) is a 45-minute tutorial: create a
+message-passing deadlock on QNX OS 8.0, look at it with `pidin`, and write a
+135-line tool that finds it by reading `/proc`. It is self-contained, and it
+is the simplest way to understand what knotwatch builds on.
+
 ## Where QNX is used
 
 | What | Where |

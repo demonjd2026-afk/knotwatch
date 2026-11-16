@@ -22,6 +22,12 @@ BIN="$REPO/build/x86_64"
 VM="$REPO/build/vm"
 mkdir -p "$VM/local/snippets"
 
+# The codelab's two programs, built the way the codelab tells its reader to.
+mkdir -p "$BIN/codelab"
+for prog in standoff whoblocks; do
+    ntox86_64-gcc -Wall -Wextra -O2 -o "$BIN/codelab/$prog" "$REPO/codelab/$prog.c"
+done
+
 # Files added to the image, under /system.
 cat > "$VM/local/snippets/system_files.custom" <<FILES
 [perms=555] bin/knotwatch=$BIN/knotwatch
@@ -29,6 +35,8 @@ cat > "$VM/local/snippets/system_files.custom" <<FILES
 [perms=555] bin/wheel_sensor=$BIN/wheel_sensor
 [perms=555] bin/motor_ctl=$BIN/motor_ctl
 [perms=555] bin/logger=$BIN/logger
+[perms=555] bin/standoff=$BIN/codelab/standoff
+[perms=555] bin/whoblocks=$BIN/codelab/whoblocks
 [perms=444] etc/knotwatch/demo.contract=$REPO/demo/demo.contract
 FILES
 
@@ -66,6 +74,12 @@ cat /dev/knotwatch/report
 pidin -p motor_ctl
 pidin -p logger
 KNOTWATCH_DEBUG_LOCKS=1 /system/bin/knotwatch capture 2>&1 > /dev/null | grep lock-debug | head -8
+echo "kwdemo: ---- verify: codelab ----"
+/system/bin/standoff &
+sleep 4
+pidin -p standoff
+/system/bin/whoblocks
+echo "kwdemo: whoblocks exit status $?"
 echo "kwdemo: ---- verify: published files ----"
 ls -l /dev/knotwatch
 for f in report json dot snapshot; do
