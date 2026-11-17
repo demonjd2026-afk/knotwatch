@@ -1,28 +1,42 @@
 /* Demo server: answers wheel-speed requests.
  *
- *   wheel_sensor [--fault-after N]
+ *   wheel_sensor [--fault-after N] [--send-timeout-ms M]
  *
  * With --fault-after N, the Nth request triggers the design flaw: instead of
  * just replying, the sensor first reports a fault by sending a message to
  * brake_ctl. brake_ctl's only thread is at that moment waiting for our reply,
- * so nobody receives the fault report and both processes block forever. */
+ * so nobody receives the fault report and both processes block forever.
+ *
+ * With --send-timeout-ms M the fault report is sent under a kernel timeout.
+ * The design flaw is still there, but the send fails after M ms instead of
+ * hanging, and the sensor carries on. knotwatch must not call that a
+ * deadlock while the timeout is running. */
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/dispatch.h>
 #include <sys/neutrino.h>
+#include <time.h>
 
 #include "demo_proto.h"
 
 int main(int argc, char **argv)
 {
-    long fault_after = 0;
-    if (argc == 3 && strcmp(argv[1], "--fault-after") == 0) {
-        fault_after = strtol(argv[2], NULL, 10);
+    long fault_after = 0, timeout_ms = 0;
+    int bad = (argc % 2) == 0;
+    for (int i = 1; !bad && i + 1 < argc; i += 2) {
+        long v = strtol(argv[i + 1], NULL, 10);
+        if (strcmp(argv[i], "--fault-after") == 0 && v > 0) {
+            fault_after = v;
+        } else if (strcmp(argv[i], "--send-timeout-ms") == 0 && v > 0 && v <= 3600000) {
+            timeout_ms = v;
+        } else {
+            bad = 1;
+        }
     }
-    if (argc != 1 && fault_after <= 0) {
-        fputs("usage: wheel_sensor [--fault-after N]\n", stderr);
+    if (bad) {
+        fputs("usage: wheel_sensor [--fault-after N] [--send-timeout-ms M]\n", stderr);
         return 64;
     }
 
@@ -66,7 +80,16 @@ int main(int argc, char **argv)
             demo_msg fault = {.type = DEMO_MSG_FAULT, .value = 1};
             fprintf(stderr, "wheel_sensor: fault on request %ld, notifying brake_ctl\n",
                     requests);
-            MsgSend(brake, &fault, sizeof(fault), NULL, 0); /* never returns */
+            if (timeout_ms > 0) {
+                uint64_t ns = (uint64_t)timeout_ms * 1000000ULL;
+                TimerTimeout(CLOCK_MONOTONIC, _NTO_TIMEOUT_SEND | _NTO_TIMEOUT_REPLY, NULL,
+                             &ns, NULL);
+            }
+            /* Without a timeout this never returns. */
+            if (MsgSend(brake, &fault, sizeof(fault), NULL, 0) == -1) {
+                fprintf(stderr, "wheel_sensor: fault report failed (%s), carrying on\n",
+                        strerror(errno));
+            }
         }
 
         demo_msg reply = {.type = DEMO_MSG_READ_SPEED, .value = 88};

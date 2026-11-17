@@ -65,20 +65,62 @@ with `scripts/qnx-image.sh` and `scripts/qemu-run.sh`.
     notice. It is left detectable and silenced with an `ignore` line in
     `demo/demo.contract`.
 
+- A send under a kernel timeout (`scripts/qnx-image.sh verify2`): with
+  `wheel_sensor --send-timeout-ms 15000` the sensor's thread shows
+  `state=SEND ... timeout=1` in a capture, no deadlock is reported while the
+  timeout runs, the send then fails with "Connection timed out" and the
+  sensor goes back to RECEIVE. The hierarchy warnings stay.
+- Eight readers of `report` and eight of `json` at the same time each get a
+  complete, identical file.
+- Mutex owners that are not thread 1: `tests/target/kwt_locks.c threads`
+  is reported as a three-thread deadlock with thread 2 waiting on thread 3
+  and thread 3 on thread 2, as `pidin` shows (`811030-03`, `811030-02`).
+- Process-shared mutexes held by another process: `kwt_locks shared` is
+  reported as a two-process deadlock, each main thread waiting on a lock held
+  by the other process, as `pidin` shows.
+- Without root: `knotwatch scan --user 1000:1000` and
+  `knotwatch watch --user 1000:1000` print "running as uid 1000, gid 1000"
+  and report the same two deadlocks as a scan run as root. The process keeps
+  the `xprocess_query` and `xprocess_mem_read` abilities and nothing else
+  beyond an ordinary user's.
+
+## Verified on QNX OS 8.0.0, aarch64le, QEMU
+
+Built with `ntoaarch64-gcc`, image made with `ARCH=aarch64
+scripts/qnx-image.sh verify`, booted with `ARCH=aarch64 scripts/qemu-run.sh`
+on QEMU's `virt-7.2` machine with a `cortex-a76` CPU (`uname`: QNX 8.0.0
+QEMU_virt aarch64le).
+
+- Everything compiles without warnings, as on x86_64.
+- Both demo scenarios: the latent cycle is reported before the fault, the
+  two-thread deadlock after it, and the three-thread deadlock with the lock
+  held across a send. `knotwatch scan` exits with status 2.
+- The mutex owner is decoded the same way as on x86_64 (raw value
+  `0x90120001` for pid 397330 thread 1) and agrees with `pidin`
+  (`397330-01`).
+- Blocked states and peers agree with `pidin` for all demo threads.
+- The codelab's `standoff` and `whoblocks` build and behave as in the
+  tutorial; knotwatch reports that deadlock too.
+- The four published files, the snapshot replay, the long-lived reader,
+  slog2 logging and the refusal of an unprivileged scan all behave as on
+  x86_64. A capture has 61 threads against 62 in `pidin`, which counts
+  itself.
+- The `verify2` checks pass as on x86_64: no deadlock is reported for a send
+  under a kernel timeout (`state=SEND ... timeout=1`) and the sensor
+  recovers; eight concurrent readers get identical complete files; locks
+  held by threads 2 and 3 and process-shared locks held by another process
+  are attributed correctly and agree with `pidin`; `scan` and `watch` with
+  `--user 1000:1000` run as uid 1000 and report the same two deadlocks as
+  root.
+
 ## Still to verify on QNX
 
-1. A thread blocked in `MsgSend()` after `TimerTimeout()`: confirm it is
-   treated as alive.
-2. Running as a non-root user that has been granted `xprocess_query`.
-3. Two readers of `/dev/knotwatch` files at the same time.
-4. Mutex owners other than thread 1, a process-shared mutex held by another
-   process, and the owner encoding on aarch64le.
-5. aarch64le, and real hardware.
-6. The MCP server reading from a live target over `ssh`, and its use from
+1. Real hardware.
+2. The MCP server reading from a live target over `ssh`, and its use from
    inside a specific AI assistant. The QEMU image used so far has no network.
 
 ## Planned next
 
-- Run as a non-root user with only the abilities it needs, with a security
-  policy.
+- A security policy (secpol) type for knotwatch, as an alternative to
+  `--user`.
 - A CI recipe that boots QEMU, runs a workload and gates on `knotwatch scan`.

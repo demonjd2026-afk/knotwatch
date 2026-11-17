@@ -41,15 +41,16 @@ same run had already reported:
 
 ## Status
 
-- Builds with QNX SDP 8.0 (`ntox86_64-gcc`) without warnings and runs on QNX
-  OS 8.0.0, x86_64, in QEMU. The demo scenario passes end to end:
+- Builds with QNX SDP 8.0 for x86_64 and for 64-bit Arm (`ntox86_64-gcc`,
+  `ntoaarch64-gcc`) without warnings, and runs on QNX OS 8.0.0 on both, in
+  QEMU. The demo scenarios and the on-target checks pass end to end on both:
   `scripts/qnx-image.sh` then `scripts/qemu-run.sh`.
 - The portable core (snapshot format, analysis, contract, renderers, CLI) is
   tested on Linux with `make check`, also clean under ASan and UBSan.
 - An MCP server (`agent/knotwatch_mcp.py`) lets AI coding assistants query
   the reports. It is tested on Linux, including against the official MCP
   client library.
-- Not yet run on aarch64 or on hardware.
+- Not yet run on hardware.
   [docs/VERIFICATION.md](docs/VERIFICATION.md) lists what has been confirmed
   on a target and what has not.
 
@@ -122,8 +123,8 @@ A process may only send to a strictly lower layer.
 ## Build and run
 
 Requirements: QNX SDP 8.0 (free through QNX Everywhere), GNU make. Tested
-target: QNX OS 8.0.0 on x86_64 in QEMU, built with `ntox86_64-gcc` from the
-SDP's Linux host tools. aarch64le builds the same way but is untested.
+targets: QNX OS 8.0.0 on x86_64 and on aarch64le, both in QEMU, built with
+`ntox86_64-gcc` and `ntoaarch64-gcc` from the SDP's Linux host tools.
 
 ```sh
 # On the target (self-hosted QNX Developer Desktop):
@@ -131,7 +132,7 @@ make
 
 # Cross-compiling, with the QNX SDP 8.0 environment sourced:
 make QNX=1 CC=ntox86_64-gcc  BUILD=build/x86_64      # QEMU x86_64
-make QNX=1 CC=ntoaarch64-gcc BUILD=build/aarch64le   # Raspberry Pi, QEMU virt
+make QNX=1 CC=ntoaarch64-gcc BUILD=build/aarch64     # QEMU virt, 64-bit Arm boards
 ```
 
 From macOS, where the SDP tools do not run natively, the scripts below run
@@ -145,6 +146,10 @@ sh scripts/qnx-image.sh          # bootable image with knotwatch and the demo
 sh scripts/qemu-run.sh           # boot it, run the demo, print the reports
 sh scripts/qemu-run.sh console   # or get an interactive console instead
 ```
+
+Put `ARCH=aarch64` in front of any of them for 64-bit Arm. That image also
+needs the SDP packages "QEMU Virtualization Drivers (Startup)" and
+"Virtualization Drivers (Block)", installed with QNX Software Center.
 
 On the target, as root:
 
@@ -173,6 +178,11 @@ On any host (Linux, macOS), no QNX tools needed:
 make && make check
 build/knotwatch analyze system.kws --format json
 ```
+
+`scan`, `capture` and `watch` have to start as root, but need not stay root:
+with `--user UID[:GID]` knotwatch keeps the two process-manager abilities a
+scan needs (`xprocess_query`, `xprocess_mem_read`) and switches to that user.
+`watch` does so after it has attached its path names.
 
 Exit status: 0 clean or notices only, 1 warnings, 2 deadlock or blocking
 cycle. That makes `knotwatch scan` usable as a gate in a QEMU-based CI job.
@@ -263,6 +273,8 @@ is the simplest way to understand what knotwatch builds on.
 | Resource manager with per-open pinned contents (extended OCB) | `src/qnx/watch.c`, `io_read()`, `ocb_calloc()` |
 | Timer pulse on the dispatch channel | `src/qnx/watch.c`, `kw_watch_run()`, `on_tick()` |
 | slog2 event logging | `src/qnx/watch.c`, `log_changes()` |
+| Dropping root while keeping two process-manager abilities (`procmgr_ability()`) | `src/qnx/privs.c`, `kw_drop_privileges()` |
+| A send under a kernel timeout (`TimerTimeout()`) | `demo/wheel_sensor.c` |
 | Native message passing, `name_attach()`/`name_open()` | `demo/brake_ctl.c`, `demo/wheel_sensor.c` |
 | A mutex held across `MsgSend()` | `demo/motor_ctl.c`, `demo/logger.c` |
 
@@ -275,8 +287,8 @@ is the simplest way to understand what knotwatch builds on.
   thread blocked on one is treated as alive, so such deadlocks are missed,
   never misreported.
 - The owner of a mutex is decoded from the value QNX stores in it. That
-  encoding was established by observation on QNX OS 8.0.0 x86_64 and agrees
-  with `pidin`; it is not a documented interface. When the owner cannot be
+  encoding was established by observation on QNX OS 8.0.0, is the same on
+  x86_64 and aarch64le, and agrees with `pidin`; it is not a documented interface. When the owner cannot be
   determined with certainty the waiter is treated as alive, and the report
   says so.
 - A `potential-cycle` is a hint. Two processes may hold connections to each

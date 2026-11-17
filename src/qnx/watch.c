@@ -349,6 +349,10 @@ int kw_watch_run(const kw_watch_config *cfg)
     if (ctp == NULL) {
         return fail("dispatch_context_alloc");
     }
+    /* Everything that needs root (the path names, the priority) is done. */
+    if (cfg->drop && kw_drop_privileges(cfg->uid, cfg->gid) != 0) {
+        return fail("cannot drop privileges");
+    }
     scan_once(); /* have content before the first reader arrives */
     fprintf(stderr, "knotwatch: watching, results under %s (every %u ms)\n", cfg->mount,
             cfg->interval_ms);

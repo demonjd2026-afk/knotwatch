@@ -26,7 +26,13 @@ typedef struct {
     int priority;              /* scheduling priority, 0 = leave unchanged */
     const kw_contract *contract; /* may be NULL */
     kw_options options;
+    int drop;                  /* give up root once the files are published */
+    unsigned uid, gid;         /* who to run as when `drop` is set */
 } kw_watch_config;
+
+/* Keep only the abilities a scan needs (xprocess_query, xprocess_mem_read),
+ * then switch to uid:gid for good. Returns 0, or -1 with errno set. */
+int kw_drop_privileges(unsigned uid, unsigned gid);
 
 /* Run the resource manager. Only returns on a fatal error (-1). */
 int kw_watch_run(const kw_watch_config *cfg);

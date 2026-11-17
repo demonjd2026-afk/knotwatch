@@ -29,6 +29,8 @@ typedef struct {
     unsigned long min_block_ms;
     unsigned long interval_ms;
     unsigned long priority;
+    int drop;              /* --user given */
+    unsigned long uid, gid;
 } cli;
 
 static void usage(FILE *out)
@@ -51,6 +53,8 @@ static void usage(FILE *out)
           "  --interval-ms N    watch: time between scans (1000)\n"
           "  --mount DIR        watch: where to publish (/dev/knotwatch)\n"
           "  --priority N       watch: run the scanner at this priority\n"
+          "  --user UID[:GID]   start as root, keep only the abilities a scan\n"
+          "                     needs, then run as this user\n"
 #endif
           "\n"
           "exit status: 0 clean or notices only, 1 warnings, 2 deadlock or\n"
@@ -70,6 +74,29 @@ static int parse_ulong(const char *text, unsigned long max, unsigned long *out)
         return -1;
     }
     *out = v;
+    return 0;
+}
+
+/* "UID" or "UID:GID", numeric. The group defaults to the same number. */
+static int parse_user(const char *text, cli *c)
+{
+    char buf[32];
+    if (strlen(text) >= sizeof(buf)) {
+        return -1;
+    }
+    strcpy(buf, text);
+    char *colon = strchr(buf, ':');
+    if (colon != NULL) {
+        *colon = '\0';
+    }
+    if (parse_ulong(buf, 0x7ffffffeUL, &c->uid) != 0) {
+        return -1;
+    }
+    c->gid = c->uid;
+    if (colon != NULL && parse_ulong(colon + 1, 0x7ffffffeUL, &c->gid) != 0) {
+        return -1;
+    }
+    c->drop = 1;
     return 0;
 }
 
@@ -117,6 +144,8 @@ static int parse_args(int argc, char **argv, cli *c)
             bad = parse_ulong(val, 3600000UL, &c->interval_ms) || c->interval_ms < 10;
         } else if (strcmp(arg, "--priority") == 0) {
             bad = parse_ulong(val, 255, &c->priority) || c->priority == 0;
+        } else if (strcmp(arg, "--user") == 0) {
+            bad = parse_user(val, c);
         } else {
             fprintf(stderr, "knotwatch: unknown option '%s'\n", arg);
             return -1;
@@ -244,10 +273,19 @@ static int collect_or_complain(kw_snapshot *snap)
     return 0;
 }
 
+static int drop_if_asked(const cli *c)
+{
+    if (c->drop && kw_drop_privileges((unsigned)c->uid, (unsigned)c->gid) != 0) {
+        fprintf(stderr, "knotwatch: cannot drop privileges: %s\n", strerror(errno));
+        return -1;
+    }
+    return 0;
+}
+
 static int cmd_scan(const cli *c, const kw_contract *contract)
 {
     kw_snapshot snap;
-    if (collect_or_complain(&snap) != 0) {
+    if (drop_if_asked(c) != 0 || collect_or_complain(&snap) != 0) {
         return EXIT_INPUT;
     }
     int rc = report(&snap, contract, c);
@@ -255,10 +293,10 @@ static int cmd_scan(const cli *c, const kw_contract *contract)
     return rc;
 }
 
-static int cmd_capture(void)
+static int cmd_capture(const cli *c)
 {
     kw_snapshot snap;
-    if (collect_or_complain(&snap) != 0) {
+    if (drop_if_asked(c) != 0 || collect_or_complain(&snap) != 0) {
         return EXIT_INPUT;
     }
     kw_strbuf out;
@@ -278,6 +316,9 @@ static int cmd_watch(const cli *c, const kw_contract *contract)
         .priority = (int)c->priority,
         .contract = contract,
         .options = {.min_block_ns = (uint64_t)c->min_block_ms * 1000000ULL},
+        .drop = c->drop,
+        .uid = (unsigned)c->uid,
+        .gid = (unsigned)c->gid,
     };
     return kw_watch_run(&cfg) == 0 ? 0 : 70;
 }
@@ -306,6 +347,14 @@ int main(int argc, char **argv)
         active = &contract;
     }
 
+#ifndef KW_QNX
+    if (c.drop) {
+        fputs("knotwatch: --user is only available on QNX\n", stderr);
+        kw_contract_free(&contract);
+        return EXIT_USAGE;
+    }
+#endif
+
     int rc;
     if (strcmp(c.command, "analyze") == 0) {
         rc = cmd_analyze(&c, active);
@@ -313,7 +362,7 @@ int main(int argc, char **argv)
     } else if (strcmp(c.command, "scan") == 0) {
         rc = cmd_scan(&c, active);
     } else if (strcmp(c.command, "capture") == 0) {
-        rc = cmd_capture();
+        rc = cmd_capture(&c);
     } else if (strcmp(c.command, "watch") == 0) {
         rc = cmd_watch(&c, active);
 #endif
