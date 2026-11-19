@@ -250,6 +250,7 @@ python3 agent/knotwatch_mcp.py --snapshot system.kws --knotwatch build/knotwatch
 
 Register one of those lines as an MCP server in your assistant. Add `--check`
 to print the status once and exit, to test the source.
+`scripts/agent-check.sh` runs the whole path against a QNX guest in QEMU.
 
 The server only reads. The source is fixed at start-up, tool arguments never
 reach a command line, and the command runs without a shell. Text that comes
@@ -305,7 +306,8 @@ is the simplest way to understand what knotwatch builds on.
   tested on Linux with `make check`, also clean under ASan and UBSan.
 - An MCP server (`agent/knotwatch_mcp.py`) lets AI coding assistants query
   the reports. It is tested on Linux, including against the official MCP
-  client library.
+  client library, and end to end against a live QNX guest over ssh
+  (`scripts/agent-check.sh`).
 - Not yet run on hardware.
   [docs/VERIFICATION.md](docs/VERIFICATION.md) lists what has been confirmed
   on a target and what has not.

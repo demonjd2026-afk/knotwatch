@@ -84,6 +84,14 @@ with `scripts/qnx-image.sh` and `scripts/qemu-run.sh`.
   the `xprocess_query` and `xprocess_mem_read` abilities and nothing else
   beyond an ordinary user's.
 
+- The MCP server against a live target (`scripts/agent-check.sh`): the demo
+  image is booted with the guest's ssh port forwarded to the host, and
+  `agent/knotwatch_mcp.py --command 'ssh ... cat /dev/knotwatch/json'` is
+  driven over the protocol. `knotwatch_status` reports the deadlock,
+  `knotwatch_finding` returns the two blocked threads with the usual fixes,
+  and `knotwatch_process` lists the links of `brake_ctl`, all from the
+  running system.
+
 ## Verified on QNX OS 8.0.0, aarch64le, QEMU
 
 Built with `ntoaarch64-gcc`, image made with `ARCH=aarch64
@@ -116,8 +124,9 @@ QEMU_virt aarch64le).
 ## Still to verify on QNX
 
 1. Real hardware.
-2. The MCP server reading from a live target over `ssh`, and its use from
-   inside a specific AI assistant. The QEMU image used so far has no network.
+2. The MCP server registered inside a specific AI assistant. It has been
+   driven by a scripted client and by the official MCP client library, not by
+   an assistant product.
 
 ## Planned next
 

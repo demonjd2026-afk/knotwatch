@@ -8,7 +8,7 @@
 #   on the target (self-hosted QNX Developer Desktop):   make
 #   cross, QNX SDP 8.0 environment sourced:
 #       make QNX=1 CC=ntox86_64-gcc      BUILD=build/x86_64
-#       make QNX=1 CC=ntoaarch64-gcc     BUILD=build/aarch64le
+#       make QNX=1 CC=ntoaarch64-gcc     BUILD=build/aarch64
 
 CC      ?= cc
 BUILD   ?= build

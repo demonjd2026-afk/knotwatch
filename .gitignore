@@ -2,3 +2,4 @@ build/
 codelab/vm/
 *.o
 *.d
+__pycache__/

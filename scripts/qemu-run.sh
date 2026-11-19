@@ -6,6 +6,10 @@
 #   scripts/qemu-run.sh console    # interactive serial console (Ctrl-A X quits)
 #
 #   ARCH=aarch64 scripts/qemu-run.sh [console]   # the 64-bit Arm image
+#   NET_PORT=2222 scripts/qemu-run.sh            # also forward this host port to
+#                                                # the guest's ssh (user-mode network)
+#   AFTER='command' scripts/qemu-run.sh          # run a host command once the demo
+#                                                # has finished, with QEMU still up
 #
 # Needs QEMU (macOS: brew install qemu). The guest is emulated in software,
 # so booting takes a minute or two.
@@ -47,6 +51,16 @@ aarch64_preset() {
     exit 1
 }
 
+# Optional user-mode network: no host set-up needed, and only the guest's ssh
+# port is reachable, from this machine only.
+NET_X86=""
+NET_A64=""
+if [ -n "${NET_PORT:-}" ]; then
+    fwd="user,id=net0,hostfwd=tcp:127.0.0.1:${NET_PORT}-:22"
+    NET_X86="-netdev $fwd -device virtio-net-pci,netdev=net0"
+    NET_A64="-netdev $fwd -device virtio-net-device,netdev=net0"
+fi
+
 run_qemu() {
     if [ "$ARCH" = "aarch64" ]; then
         exec qemu-system-aarch64 -machine "$A64_MACHINE" -cpu "$A64_CPU" -smp 2 \
@@ -55,13 +69,13 @@ run_qemu() {
             -device virtio-blk-device,drive=drv0 \
             -kernel output/ifs.bin \
             -object rng-random,filename=/dev/urandom,id=rng0 \
-            -device virtio-rng-device,rng=rng0 "$@"
+            -device virtio-rng-device,rng=rng0 $NET_A64 "$@"
     fi
     exec qemu-system-x86_64 -smp 2 -cpu max -m 1G -no-reboot -snapshot \
         -drive file=output/disk-qemu.vmdk,if=ide,id=drv0 \
         -kernel output/ifs.bin \
         -object rng-random,filename=/dev/urandom,id=rng0 \
-        -device virtio-rng-pci,rng=rng0 "$@"
+        -device virtio-rng-pci,rng=rng0 $NET_X86 "$@"
 }
 
 if [ "$ARCH" = "aarch64" ]; then
@@ -98,6 +112,10 @@ sleep 2
 # Everything from the first demo line onwards.
 sed -n '/kwdemo: booted/,$p' "$LOG"
 if grep -q "kwdemo: done" "$LOG"; then
+    if [ -n "${AFTER:-}" ]; then
+        sh -c "$AFTER"
+        exit $?
+    fi
     exit 0
 fi
 echo "error: the demo did not finish; see $LOG" >&2

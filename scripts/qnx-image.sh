@@ -8,6 +8,8 @@
 #   scripts/qnx-image.sh plain    # nothing runs at boot; drive it yourself
 #                                 # with scripts/qemu-run.sh console
 #   ARCH=aarch64 scripts/qnx-image.sh [mode]   # 64-bit Arm instead of x86_64
+#   SSH_KEY=path/to/key.pub scripts/qnx-image.sh [mode]   # allow root ssh with this key
+#                                 # (the file must be inside this repository)
 #
 # Output: build/vm/output/ifs.bin and build/vm/output/disk-qemu.vmdk
 # (build/vm-aarch64 for ARCH=aarch64). Boot it with scripts/qemu-run.sh,
@@ -23,7 +25,7 @@ esac
 
 if [ "${1:-}" != "--inside" ]; then
     ARCH="$ARCH" sh "$REPO/scripts/qnx-docker-build.sh"
-    exec sh "$REPO/scripts/qnx-docker.sh" env ARCH="$ARCH" \
+    exec sh "$REPO/scripts/qnx-docker.sh" env ARCH="$ARCH" SSH_KEY="${SSH_KEY:-}" \
         sh "$REPO/scripts/qnx-image.sh" --inside "${1:-demo}"
 fi
 MODE="${2:-demo}"
@@ -189,6 +191,6 @@ if [ "$MODE" = "plain" ]; then
 fi
 
 cd "$VM"
-mkqnximage --type=qemu --arch="$QNX_ARCH" --noprompt --ssh-ident=none \
+mkqnximage --type=qemu --arch="$QNX_ARCH" --noprompt --ssh-ident="${SSH_KEY:-none}" \
     --hostname=knotwatch --build
 echo "image ready: $VM/output"
