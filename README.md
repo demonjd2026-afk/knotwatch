@@ -1,7 +1,36 @@
 # knotwatch
 
-Finds message-passing deadlocks on QNX OS 8.0, including the ones that have
-not happened yet.
+**Finds message-passing deadlocks on QNX OS 8.0, including the ones that have
+not happened yet.**
+
+![QNX OS 8.0](https://img.shields.io/badge/QNX%20OS-8.0-1c7ed6)
+![targets](https://img.shields.io/badge/targets-x86__64%20%7C%20aarch64le-2f9e44)
+![language](https://img.shields.io/badge/C-gnu11-495057)
+![license](https://img.shields.io/badge/license-MIT-f08c00)
+
+**[Watch the demo (under 3 minutes)](https://youtu.be/IeGtVh0GBWg)** ·
+[Codelab](codelab/README.md) ·
+[What is verified](docs/VERIFICATION.md)
+
+My entry for the QNX Global Hackathon, category Developer Tooling & Host Tools.
+
+## Contents
+
+- [What it does](#what-it-does)
+- [Why it matters](#why-it-matters)
+- [How it works](#how-it-works)
+- [Build and run](#build-and-run)
+- [Report viewer](#report-viewer)
+- [AI assistants](#ai-assistants)
+- [Codelab](#codelab)
+- [Where QNX is used](#where-qnx-is-used)
+- [Verification status](#verification-status)
+- [Repository layout](#repository-layout)
+- [Limits](#limits)
+- [Hackathon submission](#hackathon-submission)
+- [License](#license)
+
+## What it does
 
 QNX systems are built from processes that talk by synchronous message passing.
 The classic rule for keeping that deadlock-free is the *send hierarchy*: never
@@ -10,7 +39,7 @@ tree. Nothing enforces the rule. A violation usually sits unnoticed until a
 rare code path sends a message "the wrong way", and then two processes wait on
 each other forever.
 
-knotwatch watches a running system and reports three things:
+knotwatch watches a running system and reports five kinds of finding:
 
 | Finding | Meaning | Severity |
 | --- | --- | --- |
@@ -38,21 +67,6 @@ same run had already reported:
 [WARNING] contract: wheel_sensor (layer 1) holds a connection to brake_ctl (layer 2)
 [NOTICE] potential-cycle: connections form a cycle, a latent deadlock if messages are sent around it: wheel_sensor -> brake_ctl -> wheel_sensor
 ```
-
-## Status
-
-- Builds with QNX SDP 8.0 for x86_64 and for 64-bit Arm (`ntox86_64-gcc`,
-  `ntoaarch64-gcc`) without warnings, and runs on QNX OS 8.0.0 on both, in
-  QEMU. The demo scenarios and the on-target checks pass end to end on both:
-  `scripts/qnx-image.sh` then `scripts/qemu-run.sh`.
-- The portable core (snapshot format, analysis, contract, renderers, CLI) is
-  tested on Linux with `make check`, also clean under ASan and UBSan.
-- An MCP server (`agent/knotwatch_mcp.py`) lets AI coding assistants query
-  the reports. It is tested on Linux, including against the official MCP
-  client library.
-- Not yet run on hardware.
-  [docs/VERIFICATION.md](docs/VERIFICATION.md) lists what has been confirmed
-  on a target and what has not.
 
 ## Why it matters
 
@@ -100,8 +114,9 @@ lock held across a send is caught too:
   motor_ctl[413719] thread 1 REPLY-blocked on logger[401430] channel 1 for 11.9 s (priority 10)
   motor_ctl[413719] thread 2 MUTEX-blocked on a lock held by motor_ctl[413719] thread 1 for 11.9 s (priority 10)
 ```
- Only threads blocked for longer than the scan took are considered,
-so everything reported was blocked at one common instant.
+
+Only threads blocked for longer than the scan took are considered, so
+everything reported was blocked at one common instant.
 
 **Send graph.** Across scans knotwatch accumulates who has been seen sending
 to whom, and who holds a connection to whom. Cycles in that graph are
@@ -278,6 +293,37 @@ is the simplest way to understand what knotwatch builds on.
 | Native message passing, `name_attach()`/`name_open()` | `demo/brake_ctl.c`, `demo/wheel_sensor.c` |
 | A mutex held across `MsgSend()` | `demo/motor_ctl.c`, `demo/logger.c` |
 
+## Verification status
+
+- Builds with QNX SDP 8.0 for x86_64 and for 64-bit Arm (`ntox86_64-gcc`,
+  `ntoaarch64-gcc`) without warnings, and runs on QNX OS 8.0.0 on both, in
+  QEMU. The demo scenarios and the on-target checks pass end to end on both:
+  `scripts/qnx-image.sh` then `scripts/qemu-run.sh`.
+- The portable core (snapshot format, analysis, contract, renderers, CLI) is
+  tested on Linux with `make check`, also clean under ASan and UBSan.
+- An MCP server (`agent/knotwatch_mcp.py`) lets AI coding assistants query
+  the reports. It is tested on Linux, including against the official MCP
+  client library.
+- Not yet run on hardware.
+  [docs/VERIFICATION.md](docs/VERIFICATION.md) lists what has been confirmed
+  on a target and what has not.
+
+## Repository layout
+
+```
+src/core/      portable core: snapshot format, analysis, contract, renderers
+src/qnx/       QNX-only code: collector, resource manager, privilege drop
+src/cli/       the knotwatch command line
+include/kw/    headers of the portable core
+demo/          four small processes with two planted design faults, and a contract
+codelab/       the tutorial and its two programs
+viewer/        the single-page report viewer and a real example report
+agent/         the MCP server for AI assistants
+tests/         unit tests, CLI tests, fixtures, and an on-target test program
+scripts/       build, image and QEMU scripts (including the macOS container path)
+docs/          architecture diagram, verification notes
+```
+
 ## Limits
 
 - knotwatch is a development, integration and CI tool. QNX documents `/proc`
@@ -299,6 +345,18 @@ is the simplest way to understand what knotwatch builds on.
 - Edges that start at the process manager (`procnto`) are left out of the
   hierarchy and contract checks. It is the microkernel, and it and the
   drivers hold connections to each other by design.
+
+## Hackathon submission
+
+| | |
+| --- | --- |
+| Category | Developer Tooling & Host Tools |
+| QNX version | QNX OS 8.0.0, built with QNX SDP 8.0 (build 141) |
+| Targets | x86_64 and aarch64le, both run in QEMU (`mkqnximage --type=qemu`) |
+| Toolchain | `ntox86_64-gcc` and `ntoaarch64-gcc` from the SDP's Linux host tools, GNU make |
+| Demo video | https://youtu.be/IeGtVh0GBWg |
+| Codelab | [codelab/README.md](codelab/README.md) |
+| Proof of QNX use | [Where QNX is used](#where-qnx-is-used), with files and functions |
 
 ## License
 
