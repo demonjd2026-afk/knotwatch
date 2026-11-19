@@ -8,6 +8,8 @@ not happened yet.**
 ![language](https://img.shields.io/badge/C-gnu11-495057)
 ![license](https://img.shields.io/badge/license-MIT-f08c00)
 
+[![Watch the knotwatch demo on YouTube](docs/demo-thumbnail.png)](https://youtu.be/IeGtVh0GBWg)
+
 **[Watch the demo (under 3 minutes)](https://youtu.be/IeGtVh0GBWg)** ·
 [Codelab](codelab/README.md) ·
 [What is verified](docs/VERIFICATION.md)
