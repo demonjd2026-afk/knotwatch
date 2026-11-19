@@ -425,19 +425,43 @@ function layout() {
     members.forEach((v, i) => { pos[v] = i; });
   });
 
-  const W = 760, rowGap = 112, top = 62, boxH = 34;
+  /* A layer with more processes than fit across is laid out on several
+     lines, so nothing runs off the side. A cycle stays on one line. */
+  const W = 760, rowGap = 112, lineGap = 58, top = 62, boxH = 34, minGap = 22;
   const width = (v) => Math.max(84, names[v].length * 8 + 28);
   const nodes = [];
+  let y = top;
   rows.forEach((members, r) => {
-    const total = members.reduce((s, v) => s + width(v), 0);
-    const gap = Math.max(22, Math.min(70, (W - 40 - total) / Math.max(1, members.length)));
-    let x = (W - (total + gap * (members.length - 1))) / 2;
+    const lines = [[]];
+    let used = 0;
+    const cycleWidth = new Map();     /* a cycle too wide for one line has to wrap too */
     for (const v of members) {
-      nodes[v] = { name: names[v], x: x + width(v) / 2, y: top + r * rowGap, w: width(v), h: boxH };
-      x += width(v) + gap;
+      cycleWidth.set(comp[v], (cycleWidth.get(comp[v]) || -minGap) + minGap + width(v));
     }
+    members.forEach((v, i) => {
+      const line = lines[lines.length - 1];
+      const sameCycle = i > 0 && comp[v] === comp[members[i - 1]] && cycleWidth.get(comp[v]) <= W - 40;
+      if (line.length && !sameCycle && used + minGap + width(v) > W - 40) {
+        lines.push([v]);
+        used = width(v);
+      } else {
+        used += (line.length ? minGap : 0) + width(v);
+        line.push(v);
+      }
+    });
+    if (r > 0) y += rowGap;
+    lines.forEach((line, k) => {
+      if (k > 0) y += lineGap;
+      const total = line.reduce((s, v) => s + width(v), 0);
+      const gap = Math.max(minGap, Math.min(70, (W - 40 - total) / Math.max(1, line.length)));
+      let x = (W - (total + gap * (line.length - 1))) / 2;
+      for (const v of line) {
+        nodes[v] = { name: names[v], x: x + width(v) / 2, y, w: width(v), h: boxH };
+        x += width(v) + gap;
+      }
+    });
   });
-  return { nodes, edges, id, height: top + Math.max(0, rows.length - 1) * rowGap + boxH + 46, W };
+  return { nodes, edges, id, height: y + boxH + 46, W };
 }
 
 function edgePath(a, b, bend) {
